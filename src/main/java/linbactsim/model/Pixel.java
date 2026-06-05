@@ -1,43 +1,36 @@
 package linbactsim.model;
 
-// Source: SURE.Pixel (direct carry)
+// Source: SURE.Pixel
 public class Pixel {
 
-    // Source: SURE.Pixel fields
     private boolean isWall;
     private int count;
     private int row, col;
     private boolean isExit;
 
-    // Source: SURE.Pixel(int, int)
     public Pixel(int row, int col) {
-        throw new UnsupportedOperationException("TODO");
+        this.row = row;
+        this.col = col;
+        this.isWall = false;
+        this.count = 0;
+        this.isExit = false;
     }
 
-    // Source: SURE.Pixel#isWall()
-    public boolean isWall() { throw new UnsupportedOperationException("TODO"); }
+    public boolean isWall() {return isWall;}
 
-    // Source: SURE.Pixel#setWall(boolean)
-    public void setWall(boolean wall) { throw new UnsupportedOperationException("TODO"); }
+    public void setWall(boolean wall) {this.isWall = wall;}
 
-    // Source: SURE.Pixel#isExit()
-    public boolean isExit() { throw new UnsupportedOperationException("TODO"); }
+    public boolean isExit() {return isExit;}
 
-    // Source: SURE.Pixel#setExit(boolean)
-    public void setExit(boolean exit) { throw new UnsupportedOperationException("TODO"); }
+    public void setExit(boolean exit) {this.isExit = exit;}
 
-    // Source: SURE.Pixel#getCount()
-    public int getCount() { throw new UnsupportedOperationException("TODO"); }
+    public int getCount() {return count;}
 
-    // Source: SURE.Pixel#addCount()
-    public void addCount() { throw new UnsupportedOperationException("TODO"); }
+    public void addCount() {this.count++;}
 
-    // Source: SURE.Pixel#resetCount()
-    public void resetCount() { throw new UnsupportedOperationException("TODO"); }
+    public int getRow() {return row;}
 
-    // Source: SURE.Pixel#getRow()
-    public int getRow() { throw new UnsupportedOperationException("TODO"); }
+    public int getCol() {return col;}
 
-    // Source: SURE.Pixel#getCol()
-    public int getCol() { throw new UnsupportedOperationException("TODO"); }
+    public void resetCount() {this.count = 0;}
 }
