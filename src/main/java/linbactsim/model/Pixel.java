@@ -1,6 +1,7 @@
 package linbactsim.model;
 
 // Source: SURE.Pixel
+// DONE
 public class Pixel {
 
     private boolean isWall;

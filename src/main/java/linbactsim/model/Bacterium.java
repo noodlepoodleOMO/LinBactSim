@@ -13,11 +13,9 @@ public class Bacterium {
 
     // Source: SURE.Bacterium fields
     private int length, width;
-    private double velocity;
     private int[] position;
     private int trajectoryLength, time;
     private List<int[]> trajectory;
-    private double stdDev;
     private BacteriumSpecies species;
     private double noise;
     private boolean exited;
@@ -33,16 +31,15 @@ public class Bacterium {
     private double wMemory, wNoise, wWall;
 
     // Source: SURE.Bacterium(int, int, double, int, int, double, double, BacteriumSpecies)
-    public Bacterium(int length, int width, double velocity,
-                     int row, int col, double stdDev, double noise,
+    // velocity and stdDev are now fixed per-species; they are no longer constructor params.
+    public Bacterium(int length, int width, int row, int col, double noise,
                      BacteriumSpecies species) {
         throw new UnsupportedOperationException("TODO");
     }
 
     // Source: SURE.Bacterium(int, int, double, double, Maze, double, BacteriumSpecies)
     // Places bacterium at a random non-wall position in the maze
-    public Bacterium(int length, int width, double velocity,
-                     double stdDev, Maze maze, double noise,
+    public Bacterium(int length, int width, Maze maze, double noise,
                      BacteriumSpecies species) {
         throw new UnsupportedOperationException("TODO");
     }
@@ -91,15 +88,14 @@ public class Bacterium {
     public void setPosition(int[] position)       { throw new UnsupportedOperationException("TODO"); }
     public void setPosition(int row, int col)     { throw new UnsupportedOperationException("TODO"); }
     public void setExited(boolean exited)         { this.exited = exited; }
-    public void setStdDev(double stdDev)          { this.stdDev = stdDev; }
 
     // -------------------------------------------------------------------------
     // Getters — Source: SURE.Bacterium
     // -------------------------------------------------------------------------
 
     public int[]           getPosition()        { throw new UnsupportedOperationException("TODO"); }
-    public double          getVelocity()        { return velocity; }
-    public double          getStdDev()          { return stdDev; }
+    public double          getVelocity()        { return species.getVelocity(); }
+    public double          getStdDev()          { return species.getVelocityStdDev(); }
     public double          getNoise()           { return noise; }
     public int             getTime()            { return time; }
     public int             getTrajectoryLength(){ return trajectoryLength; }
@@ -114,4 +110,7 @@ public class Bacterium {
     public double getLambda()     { return species.getLambda(); }
     public double getMultiplier() { return species.getMultiplier(); }
     public double getBaseline()   { return species.getBaseline(); }
+
+    // Force model: inverse-Boltzmann sum-of-Gaussians at distance x from the wall.
+    public double forceAtDistance(double x) { return species.forceFunction(x); }
 }

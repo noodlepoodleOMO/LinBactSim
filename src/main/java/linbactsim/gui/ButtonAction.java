@@ -16,6 +16,7 @@ import linbactsim.simulation.SimulationRunner;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ItemEvent;
 
 // Builds the application window and wires all button actions.
 // Source: SURE.Main#main() — all JFrame setup, button declarations,
@@ -121,6 +122,33 @@ public class ButtonAction {
                                    JFrame parent) {
         throw new UnsupportedOperationException("TODO");
     }
+
+    // Clears all bacteria from the simulation and resets velocityField / stdDevField
+    // to the currently-selected species' defaults. Does NOT touch the maze.
+    // Source: SURE.Main resetButton listener (was combined reset — now split)
+    private void onResetSimulation(Maze maze, MazePanel panel,
+                                   JComboBox<BacteriumSpecies> speciesComboBox,
+                                   JTextField velocityField, JTextField stdDevField) {
+        throw new UnsupportedOperationException("TODO");
+    }
+
+    // Reverts the maze to its original loaded state (entry/exit positions, wall edits).
+    // Does NOT remove bacteria or change velocity fields.
+    // Source: SURE.Main resetButton listener (was combined reset — now split)
+    private void onResetMaze(Maze[] mazeRef, MazePanel panel, RAG[] ragRef) {
+        throw new UnsupportedOperationException("TODO");
+    }
+
+    // Call this when wiring the species dropdown in buildInputPanel.
+    // Populates velocityField and stdDevField whenever the selected species changes.
+    //   speciesComboBox.addItemListener(e -> {
+    //       if (e.getStateChange() == ItemEvent.SELECTED) {
+    //           BacteriumSpecies s = (BacteriumSpecies) e.getItem();
+    //           velocityField.setText(String.valueOf(s.getVelocity()));
+    //           stdDevField.setText(String.valueOf(s.getVelocityStdDev()));
+    //       }
+    //   });
+    // Also call once at startup to pre-populate with the initially-selected species.
 
     // -------------------------------------------------------------------------
     // Export / display actions
