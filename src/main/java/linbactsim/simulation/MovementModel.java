@@ -4,7 +4,7 @@ import linbactsim.model.Bacterium;
 import linbactsim.model.Maze;
 
 // Interface for pluggable movement strategies.
-// Implementations: CurrentModel (Weibull-weighted), PotentialModel, ChemotaxisModel.
+// Implementations: WeibullModel (Weibull-weighted), ForceModel (inverse-Boltzmann force), ChemotaxisModel.
 // Source: extracted from SURE.Bacterium#move() and SURE.Bacterium#directionWithMemory()
 public interface MovementModel {
 

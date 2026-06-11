@@ -10,7 +10,7 @@ import linbactsim.model.Maze;
 import linbactsim.resources.BacteriumSpecies;
 import linbactsim.resources.MazeMaps;
 import linbactsim.resources.UserGuide;
-import linbactsim.simulation.CurrentModel;
+import linbactsim.simulation.WeibullModel;
 import linbactsim.simulation.SimulationParameters;
 import linbactsim.simulation.SimulationRunner;
 
