@@ -10,7 +10,7 @@ import javax.swing.Timer;
 // Source: SURE.Main start-button ActionListener (~lines 1164–1296).
 public class SimulationRunner {
 
-    private final MovementModel movementModel;
+    private MovementModel movementModel;
     private SimulationTracking tracking;
     private Timer animationTimer;
 
@@ -18,16 +18,43 @@ public class SimulationRunner {
         this.movementModel = movementModel;
     }
 
+    public void setMovementModel(MovementModel movementModel) {
+        this.movementModel = movementModel;
+    }
+
+    public MovementModel getMovementModel() { return movementModel; }
+
     // Runs all steps synchronously with no repainting.
     // Source: SURE.Main fast-mode block (~lines 1201–1232).
     public void runFast(Maze maze, SimulationParameters params) {
-        throw new UnsupportedOperationException("TODO");
+        int dt       = params.getDt();
+        int maxSteps = params.getMaxSteps();
+        for (int step = 0; step < maxSteps; step++) {
+            stepAll(maze, dt);
+            boolean allDone = true;
+            for (int i = 0; i < maze.getBacteriaCount(); i++)
+                if (!maze.getBacterium(i).hasExited()) { allDone = false; break; }
+            if (allDone) break;
+        }
     }
 
-    // Runs one step per timer tick, repainting the panel each time.
+    // Runs one step per timer tick (~10 fps), repainting the panel each time.
     // Source: SURE.Main Timer-based block (~lines 1237–1293).
     public void runAnimated(Maze maze, SimulationParameters params, MazePanel panel) {
-        throw new UnsupportedOperationException("TODO");
+        if (animationTimer != null) animationTimer.stop();
+        int dt       = params.getDt();
+        int maxSteps = params.getMaxSteps();
+        int[] step   = {0};
+        animationTimer = new Timer(100, e -> {
+            if (step[0] < maxSteps) {
+                stepAll(maze, dt);
+                panel.repaint();
+                step[0]++;
+            } else {
+                ((Timer) e.getSource()).stop();
+            }
+        });
+        animationTimer.start();
     }
 
     // Source: SURE.Main simulationTimer[0].stop()
@@ -36,7 +63,6 @@ public class SimulationRunner {
     }
 
     // Advances every non-exited bacterium by one dt tick.
-    // Source: inner loop shared by both run modes.
     private void stepAll(Maze maze, int dt) {
         for (int i = 0; i < maze.getBacteriaCount(); i++) {
             Bacterium b = maze.getBacterium(i);

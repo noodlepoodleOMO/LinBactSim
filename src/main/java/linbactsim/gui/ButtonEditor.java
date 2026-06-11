@@ -1,5 +1,6 @@
 package linbactsim.gui;
 
+import linbactsim.model.Bacterium;
 import linbactsim.model.Maze;
 
 import javax.swing.*;
@@ -8,38 +9,37 @@ import java.awt.*;
 import java.util.EventObject;
 
 // Source: SURE.ButtonEditor (direct carry, package move only)
-// Custom JTable cell editor that shows a "Show Trajectory" button
-// and opens a trajectory view when clicked.
 public class ButtonEditor extends AbstractCellEditor implements TableCellEditor {
 
-    // Source: SURE.ButtonEditor fields
     private final JButton button = new JButton("Show Trajectory");
     private final Maze maze;
     private int row;
 
-    // Source: SURE.ButtonEditor(Maze)
     public ButtonEditor(Maze maze) {
         this.maze = maze;
-        throw new UnsupportedOperationException("TODO");
+        button.addActionListener(e -> {
+            Bacterium b = maze.getBacterium(row);
+            JFrame trajFrame = new JFrame("Trajectory — Bacterium " + (row + 1));
+            trajFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            JTextArea area = new JTextArea(java.util.Arrays.deepToString(
+                    b.getTrajectory().toArray(new int[0][])));
+            area.setLineWrap(true);
+            area.setWrapStyleWord(true);
+            area.setEditable(false);
+            trajFrame.add(new JScrollPane(area));
+            trajFrame.setSize(600, 300);
+            trajFrame.setVisible(true);
+            fireEditingStopped();
+        });
     }
 
-    // Source: SURE.ButtonEditor#getTableCellEditorComponent(...)
     @Override
     public Component getTableCellEditorComponent(JTable table, Object value,
-                                                  boolean isSelected,
-                                                  int row, int column) {
-        throw new UnsupportedOperationException("TODO");
+                                                  boolean isSelected, int row, int column) {
+        this.row = row;
+        return button;
     }
 
-    // Source: SURE.ButtonEditor#getCellEditorValue()
-    @Override
-    public Object getCellEditorValue() {
-        return "Show Trajectory";
-    }
-
-    // Source: SURE.ButtonEditor#isCellEditable(EventObject)
-    @Override
-    public boolean isCellEditable(EventObject anEvent) {
-        return true;
-    }
+    @Override public Object getCellEditorValue()          { return "Show Trajectory"; }
+    @Override public boolean isCellEditable(EventObject e){ return true; }
 }

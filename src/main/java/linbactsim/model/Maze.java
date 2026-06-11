@@ -1,5 +1,6 @@
 package linbactsim.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // Source: SURE.Maze
@@ -8,109 +9,109 @@ import java.util.List;
 // use Maze[] mazeRef = {maze}; instead.
 public class Maze {
 
-    // Source: SURE.Maze fields
     private Pixel[][] grid;
-    private int pixelSize;
+    private int displayPixelSize;
     private List<Bacterium> bacteria;
     private int boundaryThickness = 2;
 
     // Source: SURE.Maze(int, int, int)
-    public Maze(int rows, int cols, int pixelSize) {
-        throw new UnsupportedOperationException("TODO");
+    public Maze(int rows, int cols, int displayPixelSize) {
+        this.displayPixelSize = displayPixelSize;
+        this.grid = new Pixel[rows][cols];
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                grid[r][c] = new Pixel(r, c);
+        this.bacteria = new ArrayList<>();
     }
 
-    // Source: SURE.Maze#getPixel(int, int)
+    // -------------------------------------------------------------------------
+    // Grid accessors
+    // -------------------------------------------------------------------------
+
+    // Returns null for out-of-bounds coordinates.
     public Pixel getPixel(int row, int col) {
-        throw new UnsupportedOperationException("TODO");
+        return isValid(row, col) ? grid[row][col] : null;
     }
 
-    // Source: SURE.Maze#getPixelSize()
-    public int getPixelSize() {
-        throw new UnsupportedOperationException("TODO");
-    }
+    public int getDisplayPixelSize() { return displayPixelSize; }
+    public int getNumRows()          { return grid.length; }
+    public int getNumCols()          { return grid[0].length; }
 
-    // Source: SURE.Maze#setWall(int, int)
-    public void setWall(int row, int col) {
-        throw new UnsupportedOperationException("TODO");
-    }
-
-    // Source: SURE.Maze#isWall(int, int)
-    public boolean isWall(int row, int col) {
-        throw new UnsupportedOperationException("TODO");
-    }
-
-    // Source: SURE.Maze#isValid(int, int)
     public boolean isValid(int row, int col) {
-        throw new UnsupportedOperationException("TODO");
+        return row >= 0 && row < grid.length && col >= 0 && col < grid[0].length;
     }
 
-    // Source: SURE.Maze#getNumRows()
-    public int getNumRows() {
-        throw new UnsupportedOperationException("TODO");
+    // Out-of-bounds coordinates are treated as walls so movement models
+    // never need a separate bounds check alongside the wall check.
+    public boolean isWall(int row, int col) {
+        return !isValid(row, col) || grid[row][col].isWall();
     }
 
-    // Source: SURE.Maze#getNumCols()
-    public int getNumCols() {
-        throw new UnsupportedOperationException("TODO");
+    public void setWall(int row, int col) {
+        grid[row][col].setWall(true);
     }
 
-    // Source: SURE.Maze#getBacteria()
-    public List<Bacterium> getBacteria() {
-        throw new UnsupportedOperationException("TODO");
-    }
+    public int getBoundaryThickness()                    { return boundaryThickness; }
+    public void setBoundaryThickness(int thickness)      { this.boundaryThickness = thickness; }
 
-    // Source: SURE.Maze#addBacterium(Bacterium)
-    public void addBacterium(Bacterium bacterium) {
-        throw new UnsupportedOperationException("TODO");
-    }
+    // -------------------------------------------------------------------------
+    // Bacterium list
+    // -------------------------------------------------------------------------
 
-    // Source: SURE.Maze#getBacteriumPosition(int)
-    public int[] getBacteriumPosition(int index) {
-        throw new UnsupportedOperationException("TODO");
-    }
+    public List<Bacterium> getBacteria()              { return bacteria; }
+    public void addBacterium(Bacterium b)             { bacteria.add(b); }
+    public Bacterium getBacterium(int index)          { return bacteria.get(index); }
+    public int[] getBacteriumPosition(int index)      { return bacteria.get(index).getPosition(); }
+    public int getBacteriaCount()                     { return bacteria.size(); }
+    public void clearBacteria()                       { bacteria.clear(); }
 
-    // Source: SURE.Maze#getBacterium(int)
-    public Bacterium getBacterium(int index) {
-        throw new UnsupportedOperationException("TODO");
-    }
+    // -------------------------------------------------------------------------
+    // Grid-wide clear helpers
+    // -------------------------------------------------------------------------
 
-    // Source: SURE.Maze#getBacteriaCount()
-    public int getBacteriaCount() {
-        throw new UnsupportedOperationException("TODO");
-    }
-
-    // Source: SURE.Maze#getPixelsOnLine(int, int, int, int) — Bresenham line algorithm
-    public List<Pixel> getPixelsOnLine(int row1, int col1, int row2, int col2) {
-        throw new UnsupportedOperationException("TODO");
-    }
-
-    // Source: SURE.Maze#clearBacteria()
-    public void clearBacteria() {
-        throw new UnsupportedOperationException("TODO");
-    }
-
-    // Source: SURE.Maze#clearDensity()
     public void clearDensity() {
-        throw new UnsupportedOperationException("TODO");
+        for (Pixel[] row : grid)
+            for (Pixel p : row)
+                p.resetCount();
     }
 
-    // Source: SURE.Maze#clearWalls()
     public void clearWalls() {
-        throw new UnsupportedOperationException("TODO");
+        for (Pixel[] row : grid)
+            for (Pixel p : row)
+                p.setWall(false);
     }
 
-    // Source: SURE.Maze#clearExits()
     public void clearExits() {
-        throw new UnsupportedOperationException("TODO");
+        for (Pixel[] row : grid)
+            for (Pixel p : row)
+                p.setExit(false);
     }
 
-    // Source: SURE.Maze#getBoundaryThickness()
-    public int getBoundaryThickness() {
-        throw new UnsupportedOperationException("TODO");
-    }
+    // -------------------------------------------------------------------------
+    // Bresenham line — Source: SURE.Maze#getPixelsOnLine
+    // Rasterises the straight line from (row1,col1) to (row2,col2) into an
+    // ordered list of grid pixels. Pure integer arithmetic; no rounding.
+    // Out-of-bounds pixels are skipped so callers never receive a null Pixel.
+    // -------------------------------------------------------------------------
+    public List<Pixel> getPixelsOnLine(int row1, int col1, int row2, int col2) {
+        List<Pixel> line = new ArrayList<>();
 
-    // Source: SURE.Maze#setBoundaryThickness(int)
-    public void setBoundaryThickness(int boundaryThickness) {
-        throw new UnsupportedOperationException("TODO");
+        int dx  = Math.abs(col2 - col1);
+        int dy  = Math.abs(row2 - row1);
+        int sx  = col1 < col2 ? 1 : -1;
+        int sy  = row1 < row2 ? 1 : -1;
+        int err = dx - dy;
+
+        int x = col1, y = row1;
+        while (true) {
+            if (isValid(y, x)) line.add(grid[y][x]);
+
+            if (x == col2 && y == row2) break;
+
+            int e2 = 2 * err;
+            if (e2 > -dy) { err -= dy; x += sx; }
+            if (e2 <  dx) { err += dx; y += sy; }
+        }
+        return line;
     }
 }

@@ -22,13 +22,12 @@ public class Bacterium {
     private int time;
     private int trajectoryLength;
 
-    // Continuous (sub-pixel) position — WeibullModel/ForceModel updates this each step.
-    // All direction/displacement math uses these; rounding error never accumulates.
+    // Current position as continuous doubles (always at a pixel centre in practice,
+    // since all movement goes through Bresenham). Kept for potential future use.
     private double continuousRow, continuousCol;
-    private List<double[]> continuousTrajectory;
 
     // Discrete (pixel-grid) position — rounded from continuous; used for
-    // wall/exit lookup, density counting, and rendering/animation only.
+    // wall/exit lookup, density counting, and rendering/animation.
     private int[] position;
     private List<int[]> trajectory;
 
@@ -52,7 +51,6 @@ public class Bacterium {
         this.exited = false;
         this.trajectoryLength = 0;
         this.time = 0;
-        this.continuousTrajectory = new ArrayList<>();
         this.trajectory = new ArrayList<>();
         setContinuousPosition(row, col);
         recordPosition(row, col);
@@ -69,7 +67,6 @@ public class Bacterium {
         this.exited = false;
         this.trajectoryLength = 0;
         this.time = 0;
-        this.continuousTrajectory = new ArrayList<>();
         this.trajectory = new ArrayList<>();
         int row, col;
         do {
@@ -117,7 +114,7 @@ public class Bacterium {
     public double getWWall()   { return wWall; }
 
     // -------------------------------------------------------------------------
-    // Continuous position (primary — used by WeibullModel/ForceModel for physics)
+    // Position
     // -------------------------------------------------------------------------
 
     public double getContinuousRow() { return continuousRow; }
@@ -130,19 +127,10 @@ public class Bacterium {
         this.position = new int[]{ (int) Math.round(row), (int) Math.round(col) };
     }
 
-    // Appends to both trajectory lists. Call once per pixel visited.
+    // Appends current pixel to the integer trajectory.
     public void recordPosition(double row, double col) {
-        continuousTrajectory.add(new double[]{ row, col });
-        int iRow = (int) Math.round(row);
-        int iCol = (int) Math.round(col);
-        trajectory.add(new int[]{ iRow, iCol });
+        trajectory.add(new int[]{ (int) Math.round(row), (int) Math.round(col) });
     }
-
-    public List<double[]> getContinuousTrajectory() { return continuousTrajectory; }
-
-    // -------------------------------------------------------------------------
-    // Discrete position (derived — used by rendering and wall/exit lookup)
-    // -------------------------------------------------------------------------
 
     public int[] getPosition() { return position; }
 
@@ -156,13 +144,9 @@ public class Bacterium {
     // Source: SURE.Bacterium
     // -------------------------------------------------------------------------
 
-    // Appends a discrete pixel to the integer trajectory only (used during
-    // collision-correction slides where a continuous coordinate is unavailable).
     public void addToTrajectory(int[] pos)   { trajectory.add(pos); }
-
     public void addTime(int dt)              { this.time += dt; }
     public void addTrajectoryLength(int n)   { this.trajectoryLength += n; }
-
     public List<int[]> getTrajectory()       { return trajectory; }
 
     // -------------------------------------------------------------------------
@@ -175,18 +159,17 @@ public class Bacterium {
     // Getters — Source: SURE.Bacterium
     // -------------------------------------------------------------------------
 
-    public double          getVelocity()        { return species.getVelocity(); }
-    public double          getStdDev()          { return species.getVelocityStdDev(); }
-    public double          getNoise()           { return noise; }
-    public int             getTime()            { return time; }
-    public int             getTrajectoryLength(){ return trajectoryLength; }
-    public boolean         hasExited()          { return exited; }
-    public BacteriumSpecies getSpecies()        { return species; }
-    public Color           getColor()           { return species.getColor(); }
-    public double          getPixelsize()       { return pixelsize; }
+    public double           getVelocity()        { return species.getVelocity(); }
+    public double           getStdDev()          { return species.getVelocityStdDev(); }
+    public double           getNoise()           { return noise; }
+    public int              getTime()            { return time; }
+    public int              getTrajectoryLength(){ return trajectoryLength; }
+    public boolean          hasExited()          { return exited; }
+    public BacteriumSpecies getSpecies()         { return species; }
+    public Color            getColor()           { return species.getColor(); }
+    public double           getPixelsize()       { return pixelsize; }
 
     // Weibull parameter pass-throughs from species
-    // Source: SURE.Bacterium#getK(), getLambda(), getMultiplier(), getBaseline()
     public double getK()          { return species.getK(); }
     public double getLambda()     { return species.getLambda(); }
     public double getMultiplier() { return species.getMultiplier(); }
