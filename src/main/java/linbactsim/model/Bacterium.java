@@ -15,7 +15,8 @@ public class Bacterium {
 
     // Source: SURE.Bacterium fields
     private int length, width;
-    private double pixelsize = 1;
+    private double weibullPixelSize = 0.25;
+    private double forcePixelSize   = 1.0;
     private BacteriumSpecies species;
     private double noise;
     private boolean exited;
@@ -167,7 +168,8 @@ public class Bacterium {
     public boolean          hasExited()          { return exited; }
     public BacteriumSpecies getSpecies()         { return species; }
     public Color            getColor()           { return species.getColor(); }
-    public double           getPixelsize()       { return pixelsize; }
+    public double           getWeibullPixelSize() { return weibullPixelSize; }
+    public double           getForcePixelSize()   { return forcePixelSize; }
 
     // Weibull parameter pass-throughs from species
     public double getK()          { return species.getK(); }

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn compile *)",
+      "Read(//usr/share/maven/bin/**)",
+      "Read(//opt/**)",
+      "Bash(javac -cp /workspace/src/main/java /workspace/src/main/java/linbactsim/model/Pixel.java /workspace/src/main/java/linbactsim/model/Maze.java /workspace/src/main/java/linbactsim/resources/BacteriumSpecies.java /workspace/src/main/java/linbactsim/simulation/RandomNumberGenerator.java /workspace/src/main/java/linbactsim/simulation/MovementModel.java /workspace/src/main/java/linbactsim/model/Bacterium.java /workspace/src/main/java/linbactsim/simulation/CurrentModel.java)",
+      "Bash(which java *)",
+      "Read(//usr/**)",
+      "Bash(xargs cat)"
+    ]
+  }
+}

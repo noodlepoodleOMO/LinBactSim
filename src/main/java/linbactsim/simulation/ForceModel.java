@@ -79,7 +79,7 @@ public class ForceModel implements MovementModel {
         int row = pos[0], col = pos[1];
 
         // Distances: [up, down, right, left]
-        double[] d = getDistanceToWall(maze, row, col, bacterium.getPixelsize());
+        double[] d = getDistanceToWall(maze, row, col, bacterium.getForcePixelSize());
 
         // Net force components — magnitudes sum; wWall weight controls overall influence.
         double wallRow = bacterium.forceAtDistance(d[0]) - bacterium.forceAtDistance(d[1]);

@@ -64,7 +64,7 @@ public class WeibullModel implements MovementModel {
         int[] pos = bacterium.getPosition();
         int row = pos[0], col = pos[1];
 
-        double[] d = getDistanceToWall(maze, row, col, bacterium.getPixelsize());
+        double[] d = getDistanceToWall(maze, row, col, bacterium.getWeibullPixelSize());
 
         double ceo1 = weibullPDF(d[0], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline()); // up
         double ceo2 = weibullPDF(d[1], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline()); // down
