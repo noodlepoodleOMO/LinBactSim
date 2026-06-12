@@ -14,7 +14,8 @@ import java.util.function.Consumer;
 
 // Source: SURE.MazePanel — direct carry with the following changes:
 //   • maze.getDisplayPixelSize() replaces maze.getPixelSize()
-//   • SkeletonAnalyzer replaced by RAG (all analysis overlay code is no-op until RAG is implemented)
+//   • SkeletonAnalyzer replaced by RAG
+//   • Second JWindow added for bacterium hover info (non-overlapping with pixel window)
 public class MazePanel extends JPanel {
 
     private Maze maze;
@@ -28,8 +29,14 @@ public class MazePanel extends JPanel {
     private boolean remedyDragging        = false;
     private int  hoveredBacteriumIdx      = -1;
 
+    // Pixel hover window
     private JWindow hoverInfoWindow;
     private JLabel  hoverLabel;
+
+    // Bacterium hover window — positioned to the right of the pixel window
+    private JWindow bacteriumHoverWindow;
+    private JLabel  bacteriumLabel;
+
     private int lastRow = -1, lastCol = -1;
     private int hoveredRow = -1, hoveredCol = -1;
     private int selectedRow = -1, selectedCol = -1;
@@ -52,6 +59,7 @@ public class MazePanel extends JPanel {
         ToolTipManager.sharedInstance().setDismissDelay(Integer.MAX_VALUE);
         ToolTipManager.sharedInstance().setInitialDelay(200);
 
+        // --- Pixel info hover window ---
         hoverInfoWindow = new JWindow();
         hoverLabel      = new JLabel();
         hoverLabel.setOpaque(true);
@@ -73,6 +81,20 @@ public class MazePanel extends JPanel {
         hoverInfoWindow.getContentPane().add(popupPanel);
         hoverInfoWindow.setAlwaysOnTop(true);
         hoverInfoWindow.pack();
+
+        // --- Bacterium info hover window ---
+        bacteriumHoverWindow = new JWindow();
+        bacteriumLabel = new JLabel();
+        bacteriumLabel.setOpaque(true);
+        bacteriumLabel.setBackground(new Color(220, 245, 255));
+        bacteriumLabel.setBorder(BorderFactory.createLineBorder(new Color(100, 160, 200)));
+        bacteriumLabel.setFont(bacteriumLabel.getFont().deriveFont(11f));
+        bacteriumLabel.setVerticalAlignment(JLabel.TOP);
+        JPanel bPopup = new JPanel(new BorderLayout());
+        bPopup.add(bacteriumLabel, BorderLayout.CENTER);
+        bacteriumHoverWindow.getContentPane().add(bPopup);
+        bacteriumHoverWindow.setAlwaysOnTop(true);
+        bacteriumHoverWindow.pack();
 
         setStartButton.addActionListener(e -> {
             setEditMode(EditMode.SELECT);
@@ -122,8 +144,20 @@ public class MazePanel extends JPanel {
                     hoveredRow = -1; hoveredCol = -1;
                     if (!popupPinned) hideHoverWindow();
                 }
+
                 int bIdx = findHoveredBacterium(e.getX(), e.getY());
                 if (bIdx != hoveredBacteriumIdx) { hoveredBacteriumIdx = bIdx; repaint(); }
+
+                if (bIdx >= 0) {
+                    bacteriumLabel.setText(buildBacteriumHtml(bIdx));
+                    Point sp = e.getPoint();
+                    SwingUtilities.convertPointToScreen(sp, MazePanel.this);
+                    bacteriumHoverWindow.setLocation(sp.x + 220, sp.y + 15);
+                    bacteriumHoverWindow.pack();
+                    bacteriumHoverWindow.setVisible(true);
+                } else {
+                    bacteriumHoverWindow.setVisible(false);
+                }
             }
 
             @Override public void mouseDragged(MouseEvent e) {
@@ -139,6 +173,12 @@ public class MazePanel extends JPanel {
                     }
                     repaint();
                 }
+                if (remedyDragging && currentMode == EditMode.REMEDY_VORONOI
+                        && rag != null && rag.isReady()
+                        && remedySelectedJunctionId != 0) {
+                    rag.getVoronoi().reassignRegion(row, col, remedySelectedJunctionId, maze);
+                    repaint();
+                }
             }
         });
 
@@ -148,6 +188,23 @@ public class MazePanel extends JPanel {
                 int cs  = maze.getDisplayPixelSize();
                 int col = e.getX() / cs, row = e.getY() / cs;
                 if (!maze.isValid(row, col)) return;
+
+                if (currentMode == EditMode.REMEDY_VORONOI && rag != null && rag.isReady()) {
+                    int[][] rm = rag.getRegionMap();
+                    remedySelectedJunctionId = (rm != null) ? rm[row][col] : 0;
+                    remedyDragging = true;
+                    return;
+                }
+
+                if (currentMode == EditMode.DELETE_JUNCTION && rag != null && rag.isReady()) {
+                    int[][] rm = rag.getRegionMap();
+                    if (rm != null) {
+                        int id = rm[row][col];
+                        if (id > 0) { rag.deleteJunction(id, maze); repaint(); }
+                    }
+                    return;
+                }
+
                 if (isPaintMode()) {
                     isDragging = true;
                     switch (currentMode) {
@@ -189,7 +246,11 @@ public class MazePanel extends JPanel {
             @Override public void mouseExited(MouseEvent e) {
                 isDragging = false;
                 hoveredRow = -1; hoveredCol = -1;
-                if (hoveredBacteriumIdx != -1) { hoveredBacteriumIdx = -1; repaint(); }
+                if (hoveredBacteriumIdx != -1) {
+                    hoveredBacteriumIdx = -1;
+                    bacteriumHoverWindow.setVisible(false);
+                    repaint();
+                }
                 if (!popupPinned) hideHoverWindow();
             }
         });
@@ -204,22 +265,14 @@ public class MazePanel extends JPanel {
     }
 
     // -------------------------------------------------------------------------
-    // Tooltip
+    // Tooltip (kept for accessibility; bacterium info now in the 2nd window)
     // -------------------------------------------------------------------------
     @Override
     public String getToolTipText(MouseEvent e) {
         int cs  = maze.getDisplayPixelSize();
         int col = e.getX() / cs, row = e.getY() / cs;
         if (!maze.isValid(row, col) || maze.isWall(row, col)) return null;
-        int bIdx = findHoveredBacterium(e.getX(), e.getY());
-        if (bIdx >= 0) {
-            Bacterium b = maze.getBacterium(bIdx);
-            return "<html>Bacterium " + (bIdx + 1)
-                + " | " + b.getSpecies().getName()
-                + " | Steps: " + b.getTime()
-                + " | Exited: " + b.hasExited() + "</html>";
-        }
-        return null;
+        return null; // bacterium info shown in bacteriumHoverWindow instead
     }
 
     // -------------------------------------------------------------------------
@@ -245,7 +298,51 @@ public class MazePanel extends JPanel {
             }
         }
 
-        // 2. Start cell highlight
+        // 2. Voronoi overlay (semi-transparent)
+        if (showVoronoi && rag != null && rag.isReady()) {
+            int[][] rm = rag.getRegionMap();
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    if (maze.isWall(r, c) || rm == null) continue;
+                    int id = rm[r][c];
+                    if (id == 0) continue;
+                    Color base = rag.getRegionColor(id);
+                    g.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), 80));
+                    g.fillRect(c * cs, r * cs, cs, cs);
+                }
+            }
+        }
+
+        // 3. Skeleton overlay (light red)
+        if (showSkeleton && rag != null && rag.hasSkeleton()) {
+            boolean[][] skel = rag.getSkeleton().getSkeleton();
+            g.setColor(new Color(255, 80, 80, 160));
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    if (skel != null && skel[r][c])
+                        g.fillRect(c * cs, r * cs, cs, cs);
+        }
+
+        // 4. Degree overlay (color by degree: 1=green, 2=blue, 3+=red)
+        if (showDegrees && rag != null && rag.hasSkeleton()) {
+            boolean[][] skel = rag.getSkeleton().getSkeleton();
+            int[][]     deg  = rag.getSkeleton().getDegree();
+            if (skel != null && deg != null) {
+                for (int r = 0; r < rows; r++) {
+                    for (int c = 0; c < cols; c++) {
+                        if (!skel[r][c]) continue;
+                        int d = deg[r][c];
+                        Color dc = d == 1 ? new Color(0,200,0,200)
+                                 : d == 2 ? new Color(0,100,255,200)
+                                 :          new Color(255,0,0,200);
+                        g.setColor(dc);
+                        g.fillRect(c * cs, r * cs, cs, cs);
+                    }
+                }
+            }
+        }
+
+        // 5. Start cell highlight
         if (startRow >= 0 && startCol >= 0) {
             g.setColor(new Color(255, 255, 0, 128));
             g.fillRect(startCol * cs, startRow * cs, cs, cs);
@@ -253,7 +350,7 @@ public class MazePanel extends JPanel {
             g.drawRect(startCol * cs, startRow * cs, cs, cs);
         }
 
-        // 3. Exit cells
+        // 6. Exit cells
         for (Point ep : exitPoints) {
             g.setColor(new Color(0, 255, 0, 120));
             g.fillRect(ep.x * cs, ep.y * cs, cs, cs);
@@ -261,7 +358,7 @@ public class MazePanel extends JPanel {
             g.drawRect(ep.x * cs, ep.y * cs, cs, cs);
         }
 
-        // 4. Selected cell(s)
+        // 7. Selected cell(s)
         if (selectedRow >= 0 && selectedCol >= 0) {
             g2.setColor(Color.CYAN);
             g2.setStroke(new BasicStroke(2f));
@@ -272,7 +369,7 @@ public class MazePanel extends JPanel {
                 g2.drawRect(selectedCol * cs, selectedRow * cs, cs, cs);
         }
 
-        // 5. Trajectory lines
+        // 8. Trajectory lines
         g2.setStroke(new BasicStroke(1f));
         if (showTrajectories) {
             for (int i = 0; i < maze.getBacteriaCount(); i++) {
@@ -283,7 +380,7 @@ public class MazePanel extends JPanel {
         if (hoveredBacteriumIdx >= 0 && hoveredBacteriumIdx < maze.getBacteriaCount())
             drawTrajectory(g2, hoveredBacteriumIdx, cs, 3.5f, 1.0f);
 
-        // 6. Bacteria ovals
+        // 9. Bacteria ovals
         g2.setStroke(new BasicStroke(1f));
         for (int i = 0; i < maze.getBacteriaCount(); i++) {
             Bacterium b = maze.getBacterium(i);
@@ -299,6 +396,67 @@ public class MazePanel extends JPanel {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Bacterium hover HTML
+    // -------------------------------------------------------------------------
+    private String buildBacteriumHtml(int bIdx) {
+        Bacterium b = maze.getBacterium(bIdx);
+        StringBuilder sb = new StringBuilder("<html>");
+        sb.append("<b>Bacterium ").append(bIdx + 1).append("</b>");
+        sb.append(" | ").append(b.getSpecies().getName());
+        sb.append(" | Steps: ").append(b.getTime());
+        sb.append(" | Exited: ").append(b.hasExited());
+
+        if (b.isLastVectorsSet()) {
+            String model = b.getLastModelType() != null ? b.getLastModelType() : "?";
+            sb.append("<br><b>--- ").append(model).append(" vectors (next step preview) ---</b>");
+
+            double[] dist = b.getLastRawDistances();
+            sb.append("<br>Distances: up=").append(fmt(dist[0]))
+              .append(" dn=").append(fmt(dist[1]))
+              .append(" rt=").append(fmt(dist[2]))
+              .append(" lt=").append(fmt(dist[3]));
+
+            double[] raw = b.getLastRawValues();
+            String rawLabel = "Weibull".equals(model) ? "PDF" : "Force";
+            sb.append("<br>").append(rawLabel).append(": up=").append(fmt(raw[0]))
+              .append(" dn=").append(fmt(raw[1]))
+              .append(" rt=").append(fmt(raw[2]))
+              .append(" lt=").append(fmt(raw[3]));
+
+            double[] wall = b.getLastWallVector();
+            sb.append("<br>Wall vec: (r=").append(fmt(wall[0])).append(", c=").append(fmt(wall[1])).append(")");
+
+            double[] noise = b.getLastNoiseVector();
+            sb.append("<br>Noise vec: (r=").append(fmt(noise[0])).append(", c=").append(fmt(noise[1])).append(")");
+
+            sb.append("<br>Inertia:   (r=").append(fmt(b.getHeadingRow()))
+              .append(", c=").append(fmt(b.getHeadingCol())).append(")");
+
+            int[] probe = b.getProbeNextPos();
+            if (probe != null) {
+                sb.append("<br>Predicted pos: [").append(probe[0]).append(", ").append(probe[1]).append("]");
+                if (b.isProbeHadCollision()) {
+                    int[] lf = b.getProbeLastFreePos();
+                    int[] sl = b.getProbeSlidePos();
+                    if (lf != null)
+                        sb.append("<br>Last free px: [").append(lf[0]).append(", ").append(lf[1]).append("]");
+                    if (sl != null)
+                        sb.append("<br>After slide:  [").append(sl[0]).append(", ").append(sl[1]).append("]");
+                }
+            }
+        }
+        sb.append("</html>");
+        return sb.toString();
+    }
+
+    private static String fmt(double v) {
+        return String.format("%.3f", v);
+    }
+
+    // -------------------------------------------------------------------------
+    // Trajectory drawing
+    // -------------------------------------------------------------------------
     private Color trajectoryColor(int bIdx) {
         float hue = (bIdx * 0.618033f) % 1.0f;
         return Color.getHSBColor(hue, 0.85f, 0.75f);
@@ -311,8 +469,8 @@ public class MazePanel extends JPanel {
         g2.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), Math.min(255, (int)(255 * alpha))));
         g2.setStroke(new BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         for (int j = 1; j < traj.size(); j++) {
-            g2.drawLine(traj.get(j-1)[1] * cs + cs/2, traj.get(j-1)[0] * cs + cs/2,
-                        traj.get(j)[1]   * cs + cs/2, traj.get(j)[0]   * cs + cs/2);
+            g2.drawLine(traj.get(j-1)[1]*cs + cs/2, traj.get(j-1)[0]*cs + cs/2,
+                        traj.get(j)  [1]*cs + cs/2, traj.get(j)  [0]*cs + cs/2);
         }
     }
 
@@ -325,29 +483,11 @@ public class MazePanel extends JPanel {
         return -1;
     }
 
-    private int findHoveredTrajectory(int mx, int my) {
-        int cs = maze.getDisplayPixelSize();
-        final double THRESH = Math.max(3, cs * 0.4);
-        for (int i = 0; i < maze.getBacteriaCount(); i++) {
-            List<int[]> traj = maze.getBacterium(i).getTrajectory();
-            for (int j = 1; j < traj.size(); j++) {
-                double x1 = traj.get(j-1)[1]*cs + cs/2.0, y1 = traj.get(j-1)[0]*cs + cs/2.0;
-                double x2 = traj.get(j)[1]  *cs + cs/2.0, y2 = traj.get(j)[0]  *cs + cs/2.0;
-                if (distToSegment(mx, my, x1, y1, x2, y2) < THRESH) return i;
-            }
-        }
-        return -1;
-    }
-
     private double distToSegment(double px, double py, double x1, double y1, double x2, double y2) {
         double dx = x2-x1, dy = y2-y1;
         if (dx == 0 && dy == 0) return Math.hypot(px-x1, py-y1);
         double t = Math.max(0, Math.min(1, ((px-x1)*dx + (py-y1)*dy) / (dx*dx + dy*dy)));
         return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
-    }
-
-    private String buildTrajectoryTooltip(int bIdx, List<Integer> rt) {
-        return "Bacterium " + (bIdx + 1);
     }
 
     private String buildCellHtml(int row, int col) {
@@ -414,7 +554,12 @@ public class MazePanel extends JPanel {
     public int getStartRow() { return startRow; }
     public int getStartCol() { return startCol; }
 
-    public void setMaze(Maze newMaze) { this.maze = newMaze; exitPoints.clear(); rag = null; }
+    public void setMaze(Maze newMaze) {
+        this.maze = newMaze;
+        exitPoints.clear();
+        rag = null;
+        bacteriumHoverWindow.setVisible(false);
+    }
 
     public void setStartPointListener(Consumer<Point> l) { startPointListener = l; }
     public void setExitPointListener(Consumer<Point>  l) { exitPointListener  = l; }

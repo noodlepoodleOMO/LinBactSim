@@ -18,34 +18,28 @@ public class WeibullModel implements MovementModel {
         int[] pos = bacterium.getPosition();
         int row = pos[0], col = pos[1];
 
-        double dir          = computeDirection(bacterium, maze, bacterium.getNoise());
-        double verticalDir  = Math.sin(dir);
+        double dir           = computeDirection(bacterium, maze, bacterium.getNoise());
+        double verticalDir   = Math.sin(dir);
         double horizontalDir = Math.cos(dir);
 
-        double stepDist = displacement(bacterium, dt);
+        double stepDist = bacterium.hasPendingDisplacement()
+                ? bacterium.consumePendingDisplacement()
+                : displacement(bacterium, dt);
 
-        int newRow = (int)(row + verticalDir  * stepDist);
+        int newRow = (int)(row + verticalDir   * stepDist);
         int newCol = (int)(col + horizontalDir * stepDist);
 
         if (maze.isValid(newRow, newCol) && !maze.isWall(newRow, newCol)) {
             List<Pixel> path = maze.getPixelsOnLine(row, col, newRow, newCol);
-
             boolean collision = false;
-            for (Pixel p : path) {
-                if (p.isWall()) { collision = true; break; }
-            }
-
+            for (Pixel p : path) { if (p.isWall()) { collision = true; break; } }
             if (!collision) {
                 for (int i = 1; i < path.size(); i++) {
                     Pixel p = path.get(i);
                     bacterium.setContinuousPosition(p.getRow(), p.getCol());
                     bacterium.recordPosition(p.getRow(), p.getCol());
                     maze.getPixel(p.getRow(), p.getCol()).addCount();
-                    if (p.isExit()) {
-                        bacterium.setExited(true);
-                        bacterium.addTime(dt);
-                        return;
-                    }
+                    if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
                 }
                 bacterium.addTime(dt);
             } else {
@@ -71,7 +65,6 @@ public class WeibullModel implements MovementModel {
         double ceo3 = weibullPDF(d[2], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline()); // right
         double ceo4 = weibullPDF(d[3], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline()); // left
 
-        // Row increases downward, so upward pull (ceo1) means row--, hence the negation.
         double wallRow = -(ceo1 - ceo2);
         double wallCol =   ceo3 - ceo4;
         double[] wallU = unit(wallRow, wallCol);
@@ -81,59 +74,210 @@ public class WeibullModel implements MovementModel {
         double headingRow = bacterium.getHeadingRow();
         double headingCol = bacterium.getHeadingCol();
 
-        // Angle noise is centred on the current heading (or wall direction on the very first step).
         double currentAngle;
-        if (norm(headingRow, headingCol) >= 1e-9) {
+        if (norm(headingRow, headingCol) >= 1e-9)
             currentAngle = Math.atan2(headingRow, headingCol);
-        } else if (norm(wallRow, wallCol) >= 1e-9) {
+        else if (norm(wallRow, wallCol) >= 1e-9)
             currentAngle = Math.atan2(wallRow, wallCol);
+        else
+            currentAngle = Math.PI / 2.0;
+
+        double noiseRow, noiseCol;
+        if (bacterium.hasPendingNoise()) {
+            double[] pending = bacterium.consumePendingNoise();
+            noiseRow = pending[0];
+            noiseCol = pending[1];
         } else {
-            currentAngle = Math.PI / 2.0; // fallback: downward
+            double dTheta    = RandomNumberGenerator.getAngleNoise(noiseBound);
+            double noisyAngle = currentAngle + dTheta;
+            double[] noiseU  = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
+            noiseRow = noiseU[0];
+            noiseCol = noiseU[1];
         }
 
-        double dTheta    = RandomNumberGenerator.getAngleNoise(noiseBound);
-        double noisyAngle = currentAngle + dTheta;
-        double[] noiseU  = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
-        double noiseRow  = noiseU[0];
-        double noiseCol  = noiseU[1];
+        // Store vectors for display
+        bacterium.setLastVectorInfo("Weibull", d,
+                new double[]{ceo1, ceo2, ceo3, ceo4},
+                wallRow, wallCol, noiseRow, noiseCol);
 
         double combRow = bacterium.getWMemory() * headingRow + bacterium.getWNoise() * noiseRow + bacterium.getWWall() * wallRow;
         double combCol = bacterium.getWMemory() * headingCol + bacterium.getWNoise() * noiseCol + bacterium.getWWall() * wallCol;
 
-        if (norm(combRow, combCol) < 1e-9) {
-            combRow = wallRow;
-            combCol = wallCol;
-        }
+        if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
 
         double[] combU = unit(combRow, combCol);
         combRow = combU[0];
         combCol = combU[1];
 
-        // Boundary guard: clamp direction at the border ring so bacteria don't walk into it.
         int boundary = maze.getBoundaryThickness();
-        int minRow = boundary;
-        int minCol = boundary;
-        int maxRow = maze.getNumRows() - 1 - boundary;
-        int maxCol = maze.getNumCols() - 1 - boundary;
-
         boolean changed = false;
-        if (row <= minRow && combRow < 0) { combRow = 0; changed = true; }
-        if (row >= maxRow && combRow > 0) { combRow = 0; changed = true; }
-        if (col <= minCol && combCol < 0) { combCol = 0; changed = true; }
-        if (col >= maxCol && combCol > 0) { combCol = 0; changed = true; }
+        if (row <= boundary && combRow < 0)                          { combRow = 0; changed = true; }
+        if (row >= maze.getNumRows()-1-boundary && combRow > 0)      { combRow = 0; changed = true; }
+        if (col <= boundary && combCol < 0)                          { combCol = 0; changed = true; }
+        if (col >= maze.getNumCols()-1-boundary && combCol > 0)      { combCol = 0; changed = true; }
 
         if (changed) {
             double[] boundedU = unit(combRow, combCol);
-            combRow = boundedU[0];
-            combCol = boundedU[1];
-            if (norm(combRow, combCol) < 1e-9) {
-                combRow = wallRow;
-                combCol = wallCol;
-            }
+            combRow = boundedU[0]; combCol = boundedU[1];
+            if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
         }
 
         bacterium.setHeading(combRow, combCol);
         return Math.atan2(combRow, combCol);
+    }
+
+    // -------------------------------------------------------------------------
+    // probeFullStep — dry-run: compute full next step without modifying state.
+    // Pre-samples noise + displacement and stores as pending so the first
+    // continuation step uses the exact same values.
+    // -------------------------------------------------------------------------
+    public void probeFullStep(Bacterium bacterium, Maze maze, int dt) {
+        if (bacterium.hasExited()) return;
+
+        // --- Compute direction (mirrors computeDirection but does NOT call setHeading) ---
+        bacterium.ensureHeadingInitialized();
+        int[] pos = bacterium.getPosition();
+        int row = pos[0], col = pos[1];
+
+        double[] d = getDistanceToWall(maze, row, col, bacterium.getWeibullPixelSize());
+        double ceo1 = weibullPDF(d[0], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
+        double ceo2 = weibullPDF(d[1], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
+        double ceo3 = weibullPDF(d[2], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
+        double ceo4 = weibullPDF(d[3], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
+
+        double wallRow = -(ceo1 - ceo2), wallCol = ceo3 - ceo4;
+        double[] wallU = unit(wallRow, wallCol);
+        wallRow = wallU[0]; wallCol = wallU[1];
+
+        double headingRow = bacterium.getHeadingRow();
+        double headingCol = bacterium.getHeadingCol();
+        double currentAngle;
+        if (norm(headingRow, headingCol) >= 1e-9)
+            currentAngle = Math.atan2(headingRow, headingCol);
+        else if (norm(wallRow, wallCol) >= 1e-9)
+            currentAngle = Math.atan2(wallRow, wallCol);
+        else
+            currentAngle = Math.PI / 2.0;
+
+        double dTheta = RandomNumberGenerator.getAngleNoise(bacterium.getNoise());
+        double noisyAngle = currentAngle + dTheta;
+        double[] noiseU = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
+        double noiseRow = noiseU[0], noiseCol = noiseU[1];
+
+        // Store as pending so the first actual continuation step uses these exact values
+        bacterium.setPendingNoise(noiseRow, noiseCol);
+
+        // Store vectors for display (overwrites last-step values with next-step preview)
+        bacterium.setLastVectorInfo("Weibull", d,
+                new double[]{ceo1, ceo2, ceo3, ceo4},
+                wallRow, wallCol, noiseRow, noiseCol);
+
+        double combRow = bacterium.getWMemory() * headingRow + bacterium.getWNoise() * noiseRow + bacterium.getWWall() * wallRow;
+        double combCol = bacterium.getWMemory() * headingCol + bacterium.getWNoise() * noiseCol + bacterium.getWWall() * wallCol;
+        if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
+        double[] cu = unit(combRow, combCol);
+        combRow = cu[0]; combCol = cu[1];
+
+        int boundary = maze.getBoundaryThickness();
+        boolean changed = false;
+        if (row <= boundary && combRow < 0)                          { combRow = 0; changed = true; }
+        if (row >= maze.getNumRows()-1-boundary && combRow > 0)      { combRow = 0; changed = true; }
+        if (col <= boundary && combCol < 0)                          { combCol = 0; changed = true; }
+        if (col >= maze.getNumCols()-1-boundary && combCol > 0)      { combCol = 0; changed = true; }
+        if (changed) {
+            double[] bu = unit(combRow, combCol);
+            combRow = bu[0]; combCol = bu[1];
+            if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
+        }
+        // NOTE: heading is NOT updated here — pure probe
+
+        double dir = Math.atan2(combRow, combCol);
+        double verticalDir = Math.sin(dir), horizontalDir = Math.cos(dir);
+
+        // Pre-sample displacement and store as pending
+        double stepDist = displacement(bacterium, dt);
+        bacterium.setPendingDisplacement(stepDist);
+
+        int newRow = (int)(row + verticalDir   * stepDist);
+        int newCol = (int)(col + horizontalDir * stepDist);
+
+        // --- Dry-run path check ---
+        if (!maze.isValid(newRow, newCol) || maze.isWall(newRow, newCol)) {
+            // Clamp and check slide
+            int boundary2 = maze.getBoundaryThickness();
+            int clampedRow = Math.max(boundary2, Math.min(newRow, maze.getNumRows()-1-boundary2));
+            int clampedCol = Math.max(boundary2, Math.min(newCol, maze.getNumCols()-1-boundary2));
+            int[][] sd = computeSlideDestination(maze, row, col, clampedRow, clampedCol, dir, stepDist);
+            if (sd != null)
+                bacterium.setProbeResult(sd[1][0], sd[1][1], true,
+                        new int[]{sd[0][0], sd[0][1]}, new int[]{sd[1][0], sd[1][1]});
+            else
+                bacterium.setProbeResult(row, col, true, new int[]{row, col}, new int[]{row, col});
+            return;
+        }
+
+        List<Pixel> path = maze.getPixelsOnLine(row, col, newRow, newCol);
+        boolean collision = false;
+        for (Pixel p : path) { if (p.isWall()) { collision = true; break; } }
+
+        if (!collision) {
+            // Find last pixel on path (may be shorter than newRow/newCol)
+            int pr = row, pc = col;
+            for (int i = 1; i < path.size(); i++) { pr = path.get(i).getRow(); pc = path.get(i).getCol(); }
+            bacterium.setProbeResult(pr, pc, false, null, null);
+        } else {
+            int boundary2 = maze.getBoundaryThickness();
+            int clampedRow = Math.max(boundary2, Math.min(newRow, maze.getNumRows()-1-boundary2));
+            int clampedCol = Math.max(boundary2, Math.min(newCol, maze.getNumCols()-1-boundary2));
+            int[][] sd = computeSlideDestination(maze, row, col, clampedRow, clampedCol, dir, stepDist);
+            if (sd != null)
+                bacterium.setProbeResult(sd[1][0], sd[1][1], true,
+                        new int[]{sd[0][0], sd[0][1]}, new int[]{sd[1][0], sd[1][1]});
+            else
+                bacterium.setProbeResult(row, col, true, new int[]{row, col}, new int[]{row, col});
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // computeSlideDestination — read-only helper extracted from applyRandomCorrection.
+    // Returns int[][]{lastFreePos, slideEndPos}, or null if no useful slide.
+    // -------------------------------------------------------------------------
+    private int[][] computeSlideDestination(Maze maze, int row, int col,
+                                            int clampedNewRow, int clampedNewCol,
+                                            double originalDir, double totalDist) {
+        List<Pixel> path = maze.getPixelsOnLine(row, col, clampedNewRow, clampedNewCol);
+        int lastFreeRow = row, lastFreeCol = col;
+        Pixel collisionPixel = null;
+        for (Pixel p : path) {
+            if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) { collisionPixel = p; break; }
+            lastFreeRow = p.getRow(); lastFreeCol = p.getCol();
+        }
+        if (collisionPixel == null) return null;
+
+        double usedDist = Math.sqrt((lastFreeRow-row)*(lastFreeRow-row) + (lastFreeCol-col)*(lastFreeCol-col));
+        double remaining = totalDist - usedDist;
+        if (remaining < 0.5) return null;
+
+        int wRow = collisionPixel.getRow(), wCol = collisionPixel.getCol();
+        boolean horizontalWall = maze.isWall(wRow, wCol-1) || maze.isWall(wRow, wCol+1);
+        boolean verticalWall   = maze.isWall(wRow-1, wCol) || maze.isWall(wRow+1, wCol);
+
+        double vertDir = Math.sin(originalDir), horizDir = Math.cos(originalDir);
+        int slideDirRow = 0, slideDirCol = 0;
+        if (horizontalWall)   slideDirCol = (horizDir > 0 ? 1 : -1);
+        else if (verticalWall) slideDirRow = (vertDir  > 0 ? 1 : -1);
+        else return new int[][]{{lastFreeRow, lastFreeCol}, {lastFreeRow, lastFreeCol}};
+
+        int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
+        int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
+
+        List<Pixel> slidePath = maze.getPixelsOnLine(lastFreeRow, lastFreeCol, sRow, sCol);
+        int slideEndRow = lastFreeRow, slideEndCol = lastFreeCol;
+        for (Pixel p : slidePath) {
+            if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) break;
+            slideEndRow = p.getRow(); slideEndCol = p.getCol();
+        }
+        return new int[][]{{lastFreeRow, lastFreeCol}, {slideEndRow, slideEndCol}};
     }
 
     // Source: SURE.Bacterium#weibullPDF(double, double, double, double, double)
@@ -149,46 +293,18 @@ public class WeibullModel implements MovementModel {
 
     // Source: SURE.Bacterium#getDistanceToWall(Maze, int, int)
     // Returns [up, down, right, left] distances to nearest wall in physical units.
-    // Zero-distance directions are clamped to a small positive value to avoid division by zero in weibullPDF.
     public double[] getDistanceToWall(Maze maze, int row, int col, double pixelsize) {
         double[] result = new double[4];
         int r, c;
-
-        // Up (row decreasing)
         r = row - 1;
-        while (maze.isValid(r, col) && !maze.isWall(r, col)) {
-            result[0]++;
-            if (maze.getPixel(r, col).isExit()) break;
-            r--;
-        }
-
-        // Down (row increasing)
+        while (maze.isValid(r, col) && !maze.isWall(r, col)) { result[0]++; if (maze.getPixel(r, col).isExit()) break; r--; }
         r = row + 1;
-        while (maze.isValid(r, col) && !maze.isWall(r, col)) {
-            result[1]++;
-            if (maze.getPixel(r, col).isExit()) break;
-            r++;
-        }
-
-        // Right (col increasing)
+        while (maze.isValid(r, col) && !maze.isWall(r, col)) { result[1]++; if (maze.getPixel(r, col).isExit()) break; r++; }
         c = col + 1;
-        while (maze.isValid(row, c) && !maze.isWall(row, c)) {
-            result[2]++;
-            if (maze.getPixel(row, c).isExit()) break;
-            c++;
-        }
-
-        // Left (col decreasing)
+        while (maze.isValid(row, c) && !maze.isWall(row, c)) { result[2]++; if (maze.getPixel(row, c).isExit()) break; c++; }
         c = col - 1;
-        while (maze.isValid(row, c) && !maze.isWall(row, c)) {
-            result[3]++;
-            if (maze.getPixel(row, c).isExit()) break;
-            c--;
-        }
-
-        for (int i = 0; i < 4; i++) {
-            result[i] = (result[i] == 0) ? 0.00001 : result[i] * pixelsize;
-        }
+        while (maze.isValid(row, c) && !maze.isWall(row, c)) { result[3]++; if (maze.getPixel(row, c).isExit()) break; c--; }
+        for (int i = 0; i < 4; i++) result[i] = (result[i] == 0) ? 0.00001 : result[i] * pixelsize;
         return result;
     }
 
@@ -198,70 +314,35 @@ public class WeibullModel implements MovementModel {
                                       int dt, double originalDir,
                                       Bacterium bacterium) {
         int boundary = maze.getBoundaryThickness();
-        int minRow = boundary;
-        int minCol = boundary;
-        int maxRow = maze.getNumRows() - 1 - boundary;
-        int maxCol = maze.getNumCols() - 1 - boundary;
-
-        // Clamp target to the interior (treat border ring as walls).
-        int clampedNewRow = Math.max(minRow, Math.min(newRow, maxRow));
-        int clampedNewCol = Math.max(minCol, Math.min(newCol, maxCol));
-
-        double totalDist = Math.sqrt((clampedNewRow - row) * (clampedNewRow - row)
-                                   + (clampedNewCol - col) * (clampedNewCol - col));
+        int clampedNewRow = Math.max(boundary, Math.min(newRow, maze.getNumRows()-1-boundary));
+        int clampedNewCol = Math.max(boundary, Math.min(newCol, maze.getNumCols()-1-boundary));
+        double totalDist = Math.sqrt((clampedNewRow-row)*(clampedNewRow-row) + (clampedNewCol-col)*(clampedNewCol-col));
 
         List<Pixel> path = maze.getPixelsOnLine(row, col, clampedNewRow, clampedNewCol);
-
-        // Walk to the last free pixel before the collision.
-        int lastFreeRow = row;
-        int lastFreeCol = col;
+        int lastFreeRow = row, lastFreeCol = col;
         Pixel collisionPixel = null;
         for (Pixel p : path) {
-            if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) {
-                collisionPixel = p;
-                break;
-            }
-            lastFreeRow = p.getRow();
-            lastFreeCol = p.getCol();
+            if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) { collisionPixel = p; break; }
+            lastFreeRow = p.getRow(); lastFreeCol = p.getCol();
             bacterium.setContinuousPosition(lastFreeRow, lastFreeCol);
             bacterium.recordPosition(lastFreeRow, lastFreeCol);
             maze.getPixel(lastFreeRow, lastFreeCol).addCount();
         }
+        if (collisionPixel == null) { bacterium.addTime(dt); return; }
 
-        if (collisionPixel == null) {
-            bacterium.addTime(dt);
-            return;
-        }
-
-        double usedDist = Math.sqrt((lastFreeRow - row) * (lastFreeRow - row)
-                                  + (lastFreeCol - col) * (lastFreeCol - col));
+        double usedDist = Math.sqrt((lastFreeRow-row)*(lastFreeRow-row) + (lastFreeCol-col)*(lastFreeCol-col));
         double remaining = totalDist - usedDist;
-        if (remaining < 0.5) {
-            bacterium.addTime(dt);
-            return;
-        }
+        if (remaining < 0.5) { bacterium.addTime(dt); return; }
 
-        // Classify wall orientation from which neighbors of the collision pixel are also walls.
-        int wRow = collisionPixel.getRow();
-        int wCol = collisionPixel.getCol();
+        int wRow = collisionPixel.getRow(), wCol = collisionPixel.getCol();
+        boolean horizontalWall = maze.isWall(wRow, wCol-1) || maze.isWall(wRow, wCol+1);
+        boolean verticalWall   = maze.isWall(wRow-1, wCol) || maze.isWall(wRow+1, wCol);
 
-        // Left/right neighbors are walls → wall band runs ——— → slide left/right
-        boolean horizontalWall = maze.isWall(wRow, wCol - 1) || maze.isWall(wRow, wCol + 1);
-        // Up/down neighbors are walls → wall band runs | → slide up/down
-        boolean verticalWall   = maze.isWall(wRow - 1, wCol) || maze.isWall(wRow + 1, wCol);
-
-        double verticalDir   = Math.sin(originalDir);
-        double horizontalDir = Math.cos(originalDir);
-        int slideDirRow = 0;
-        int slideDirCol = 0;
-        if (horizontalWall) {
-            slideDirCol = (horizontalDir > 0 ? 1 : -1);
-        } else if (verticalWall) {
-            slideDirRow = (verticalDir > 0 ? 1 : -1);
-        } else {
-            bacterium.addTime(dt);
-            return;
-        }
+        double vertDir = Math.sin(originalDir), horizDir = Math.cos(originalDir);
+        int slideDirRow = 0, slideDirCol = 0;
+        if (horizontalWall)   slideDirCol = (horizDir > 0 ? 1 : -1);
+        else if (verticalWall) slideDirRow = (vertDir  > 0 ? 1 : -1);
+        else { bacterium.addTime(dt); return; }
 
         int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
         int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
@@ -272,11 +353,7 @@ public class WeibullModel implements MovementModel {
             bacterium.setContinuousPosition(p.getRow(), p.getCol());
             bacterium.recordPosition(p.getRow(), p.getCol());
             maze.getPixel(p.getRow(), p.getCol()).addCount();
-            if (p.isExit()) {
-                bacterium.setExited(true);
-                bacterium.addTime(dt);
-                return;
-            }
+            if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
         }
         bacterium.addTime(dt);
     }

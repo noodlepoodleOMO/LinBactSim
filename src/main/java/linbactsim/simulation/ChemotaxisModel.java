@@ -16,4 +16,9 @@ public class ChemotaxisModel implements MovementModel {
     public double computeDirection(Bacterium bacterium, Maze maze, double noiseBound) {
         throw new UnsupportedOperationException("TODO");
     }
+
+    @Override
+    public void probeFullStep(Bacterium bacterium, Maze maze, int dt) {
+        throw new UnsupportedOperationException("TODO");
+    }
 }

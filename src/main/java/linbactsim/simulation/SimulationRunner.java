@@ -13,6 +13,8 @@ public class SimulationRunner {
     private MovementModel movementModel;
     private SimulationTracking tracking;
     private Timer animationTimer;
+    private Runnable onComplete;
+    private int lastDt = 1;
 
     public SimulationRunner(MovementModel movementModel) {
         this.movementModel = movementModel;
@@ -28,6 +30,7 @@ public class SimulationRunner {
     // Source: SURE.Main fast-mode block (~lines 1201–1232).
     public void runFast(Maze maze, SimulationParameters params) {
         int dt       = params.getDt();
+        lastDt       = dt;
         int maxSteps = params.getMaxSteps();
         for (int step = 0; step < maxSteps; step++) {
             stepAll(maze, dt);
@@ -36,6 +39,7 @@ public class SimulationRunner {
                 if (!maze.getBacterium(i).hasExited()) { allDone = false; break; }
             if (allDone) break;
         }
+        if (onComplete != null) onComplete.run();
     }
 
     // Runs one step per timer tick (~10 fps), repainting the panel each time.
@@ -43,6 +47,7 @@ public class SimulationRunner {
     public void runAnimated(Maze maze, SimulationParameters params, MazePanel panel) {
         if (animationTimer != null) animationTimer.stop();
         int dt       = params.getDt();
+        lastDt       = dt;
         int maxSteps = params.getMaxSteps();
         int[] step   = {0};
         animationTimer = new Timer(100, e -> {
@@ -52,6 +57,7 @@ public class SimulationRunner {
                 step[0]++;
             } else {
                 ((Timer) e.getSource()).stop();
+                if (onComplete != null) onComplete.run();
             }
         });
         animationTimer.start();
@@ -71,4 +77,6 @@ public class SimulationRunner {
     }
 
     public SimulationTracking getTracking() { return tracking; }
+    public void setOnComplete(Runnable r)  { this.onComplete = r; }
+    public int  getLastDt()               { return lastDt; }
 }

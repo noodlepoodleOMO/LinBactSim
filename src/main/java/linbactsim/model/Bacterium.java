@@ -41,6 +41,24 @@ public class Bacterium {
     // Source: SURE.Bacterium#wMemory, wNoise, wWall
     private double wMemory, wNoise, wWall;
 
+    // ---- Per-step vector debug info (written by WeibullModel/ForceModel each step) ----
+    private String   lastModelType;
+    private double[] lastRawDistances = new double[4]; // [up,down,right,left] distances
+    private double[] lastRawValues    = new double[4]; // Weibull PDF or Force values
+    private double[] lastWallVector   = new double[2]; // normalized [row, col]
+    private double[] lastNoiseVector  = new double[2]; // normalized [row, col]
+    private boolean  lastVectorsSet   = false;
+
+    // ---- Pending (pre-sampled) values — consumed on first continuation step ----
+    private double[] pendingNoiseVector  = null;
+    private Double   pendingDisplacement = null;
+
+    // ---- Probe result — predicted next-step outcome (written by probeFullStep) ----
+    private int[]   probeNextPos      = null;
+    private boolean probeHadCollision = false;
+    private int[]   probeLastFreePos  = null;
+    private int[]   probeSlidePos     = null;
+
     // Source: SURE.Bacterium(int, int, double, int, int, double, double, BacteriumSpecies)
     // velocity and stdDev are now fixed per-species; they are no longer constructor params.
     public Bacterium(int length, int width, int row, int col, double noise,
@@ -179,4 +197,70 @@ public class Bacterium {
 
     // Force model: inverse-Boltzmann sum-of-Gaussians at distance x from the wall.
     public double forceAtDistance(double x) { return species.forceFunction(x); }
+
+    // -------------------------------------------------------------------------
+    // Per-step vector debug info
+    // -------------------------------------------------------------------------
+
+    public void setLastVectorInfo(String modelType,
+                                  double[] distances, double[] rawValues,
+                                  double wallRow, double wallCol,
+                                  double noiseRow, double noiseCol) {
+        this.lastModelType = modelType;
+        System.arraycopy(distances, 0, this.lastRawDistances, 0, 4);
+        System.arraycopy(rawValues, 0, this.lastRawValues,    0, 4);
+        this.lastWallVector[0]  = wallRow;  this.lastWallVector[1]  = wallCol;
+        this.lastNoiseVector[0] = noiseRow; this.lastNoiseVector[1] = noiseCol;
+        this.lastVectorsSet = true;
+    }
+
+    public boolean  isLastVectorsSet()    { return lastVectorsSet; }
+    public String   getLastModelType()    { return lastModelType; }
+    public double[] getLastRawDistances() { return lastRawDistances; }
+    public double[] getLastRawValues()    { return lastRawValues; }
+    public double[] getLastWallVector()   { return lastWallVector; }
+    public double[] getLastNoiseVector()  { return lastNoiseVector; }
+
+    // -------------------------------------------------------------------------
+    // Pending noise / displacement (for exact continuity on first resumed step)
+    // -------------------------------------------------------------------------
+
+    public boolean hasPendingNoise() { return pendingNoiseVector != null; }
+
+    public void setPendingNoise(double row, double col) {
+        pendingNoiseVector = new double[]{row, col};
+    }
+
+    public double[] consumePendingNoise() {
+        double[] v = pendingNoiseVector;
+        pendingNoiseVector = null;
+        return v;
+    }
+
+    public boolean hasPendingDisplacement() { return pendingDisplacement != null; }
+
+    public void setPendingDisplacement(double dist) { pendingDisplacement = dist; }
+
+    public double consumePendingDisplacement() {
+        double d = pendingDisplacement;
+        pendingDisplacement = null;
+        return d;
+    }
+
+    // -------------------------------------------------------------------------
+    // Probe result (predicted next-step outcome)
+    // -------------------------------------------------------------------------
+
+    public void setProbeResult(int nextRow, int nextCol,
+                               boolean collision, int[] lastFree, int[] slide) {
+        probeNextPos      = new int[]{nextRow, nextCol};
+        probeHadCollision = collision;
+        probeLastFreePos  = lastFree;
+        probeSlidePos     = slide;
+    }
+
+    public int[]   getProbeNextPos()      { return probeNextPos; }
+    public boolean isProbeHadCollision()  { return probeHadCollision; }
+    public int[]   getProbeLastFreePos()  { return probeLastFreePos; }
+    public int[]   getProbeSlidePos()     { return probeSlidePos; }
 }

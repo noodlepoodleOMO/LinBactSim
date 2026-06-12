@@ -1,13 +1,18 @@
 package linbactsim.gui;
 
 import linbactsim.analysis.RAG;
+import linbactsim.analysis.Skeleton;
+import linbactsim.analysis.Voronoi;
+import linbactsim.io.Analysis;
 import linbactsim.io.MazeIO;
+import linbactsim.io.VoronoiMap;
 import linbactsim.model.Bacterium;
 import linbactsim.model.Maze;
 import linbactsim.resources.BacteriumSpecies;
 import linbactsim.resources.MazeMaps;
 import linbactsim.resources.UserGuide;
 import linbactsim.simulation.ForceModel;
+import linbactsim.simulation.MovementModel;
 import linbactsim.simulation.SimulationParameters;
 import linbactsim.simulation.SimulationRunner;
 import linbactsim.simulation.WeibullModel;
@@ -15,12 +20,11 @@ import linbactsim.simulation.WeibullModel;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ItemEvent;
+import java.io.File;
 
 // Builds the application window and wires all button actions.
 // Source: SURE.Main#main() — all JFrame setup, button declarations, and
 // action listeners extracted here (~lines 85–1331).
-// Analysis buttons (skeleton/voronoi/RAG) are present but disabled until
-// the analysis layer is implemented.
 public class ButtonAction {
 
     // ---- Live simulation state -----------------------------------------------
@@ -31,7 +35,14 @@ public class ButtonAction {
     private RAG[]        ragRef = { null };
     private JFrame       frame;
 
-    // ---- Input fields (created here so listeners can share them) -------------
+    // ---- File-chooser memory -------------------------------------------------
+    private File lastCsvDir     = null;
+    private File lastVoronoiDir = null;
+
+    // ---- Voronoi import state ------------------------------------------------
+    private int[][] importedVoronoiGrid = null;
+
+    // ---- Input fields --------------------------------------------------------
     private final JTextField velocityField = new JTextField("8",   6);
     private final JTextField stdDevField   = new JTextField("3",   6);
     private final JTextField noiseField    = new JTextField("0.5", 6);
@@ -58,23 +69,31 @@ public class ButtonAction {
     public static void launch() { new ButtonAction().run(); }
 
     private void run() {
-        // Default maze: plaza
         Maze initial = new Maze(100, 100, 7);
         MazeIO.applyWallList(MazeMaps.buildPlazaWalls(), initial);
         savedMazeGrid = captureMazeGrid(initial);
-        mazeRef[0] = initial;
+        mazeRef[0]    = initial;
 
         panel  = new MazePanel(initial);
         runner = new SimulationRunner(new WeibullModel());
 
-        // Pre-populate velocity/stdDev from the initially selected species
+        // Set probe callback — fires after every fast or animated run
+        runner.setOnComplete(() -> {
+            int dt = runner.getLastDt();
+            MovementModel model = runner.getMovementModel();
+            Maze maze = mazeRef[0];
+            for (int i = 0; i < maze.getBacteriaCount(); i++) {
+                Bacterium b = maze.getBacterium(i);
+                if (!b.hasExited()) model.probeFullStep(b, maze, dt);
+            }
+            panel.repaint();
+        });
+
         BacteriumSpecies s0 = (BacteriumSpecies) speciesComboBox.getSelectedItem();
         if (s0 != null) {
             velocityField.setText(String.valueOf(s0.getVelocity()));
             stdDevField.setText(String.valueOf(s0.getVelocityStdDev()));
         }
-
-        // Auto-populate velocity/stdDev whenever the species selection changes
         speciesComboBox.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 BacteriumSpecies s = (BacteriumSpecies) e.getItem();
@@ -82,8 +101,6 @@ public class ButtonAction {
                 stdDevField.setText(String.valueOf(s.getVelocityStdDev()));
             }
         });
-
-        // Switch movement model at runtime
         modelComboBox.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED)
                 runner.setMovementModel("Force".equals(e.getItem()) ? new ForceModel() : new WeibullModel());
@@ -102,14 +119,14 @@ public class ButtonAction {
         JFrame f = new JFrame("LinBactSim");
         f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         f.setLayout(new BorderLayout(4, 4));
-        f.add(buildToolbar(),    BorderLayout.NORTH);
+        f.add(buildToolbar(),         BorderLayout.NORTH);
         f.add(new JScrollPane(panel), BorderLayout.CENTER);
-        f.add(buildInputPanel(), BorderLayout.EAST);
+        f.add(buildInputPanel(),      BorderLayout.EAST);
         return f;
     }
 
     private JPanel buildToolbar() {
-        // Maze loading row
+        // ---- Maze loading bar ------------------------------------------------
         JPanel mazeBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         mazeBar.setBorder(BorderFactory.createTitledBorder("Maze"));
 
@@ -119,49 +136,88 @@ public class ButtonAction {
         JButton customBtn     = new JButton("Load CSV…");
         JButton saveBtn       = new JButton("Save CSV…");
 
-        plazaBtn.addActionListener(e -> loadPlaza());
-        uniformBtn.addActionListener(e -> loadUniform());
+        plazaBtn.addActionListener(e      -> loadPlaza());
+        uniformBtn.addActionListener(e    -> loadUniform());
         nonUniformBtn.addActionListener(e -> loadNonUniform());
-        customBtn.addActionListener(e -> loadCustomCSV());
-        saveBtn.addActionListener(e -> onSaveMaze());
-
+        customBtn.addActionListener(e     -> loadCustomCSV());
+        saveBtn.addActionListener(e       -> onSaveMaze());
         for (JButton b : new JButton[]{plazaBtn, uniformBtn, nonUniformBtn, customBtn, saveBtn})
             mazeBar.add(b);
 
-        // Edit mode row
+        // ---- Edit mode bar ---------------------------------------------------
         JPanel editBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         editBar.setBorder(BorderFactory.createTitledBorder("Edit"));
 
-        JToggleButton selectBtn = new JToggleButton("Select",    true);
-        JToggleButton wallBtn   = new JToggleButton("Draw Wall");
-        JToggleButton exitBtn   = new JToggleButton("Draw Exit");
-        JToggleButton eraseBtn  = new JToggleButton("Erase");
+        JToggleButton selectBtn  = new JToggleButton("Select", true);
+        JToggleButton wallBtn    = new JToggleButton("Draw Wall");
+        JToggleButton exitBtn    = new JToggleButton("Draw Exit");
+        JToggleButton eraseBtn   = new JToggleButton("Erase");
+        JToggleButton remedyBtn  = new JToggleButton("Remedy Voronoi");
+        JToggleButton deleteJBtn = new JToggleButton("Delete Junction");
 
         ButtonGroup editGroup = new ButtonGroup();
-        for (JToggleButton tb : new JToggleButton[]{selectBtn, wallBtn, exitBtn, eraseBtn}) {
+        for (JToggleButton tb : new JToggleButton[]{selectBtn, wallBtn, exitBtn, eraseBtn, remedyBtn, deleteJBtn}) {
             editGroup.add(tb);
             editBar.add(tb);
         }
-        selectBtn.addActionListener(e -> panel.enterSelectMode());
-        wallBtn.addActionListener(e -> panel.enterWallMode());
-        exitBtn.addActionListener(e -> panel.enterExitMode());
-        eraseBtn.addActionListener(e -> panel.enterEraseWallMode());
+        selectBtn .addActionListener(e -> panel.enterSelectMode());
+        wallBtn   .addActionListener(e -> panel.enterWallMode());
+        exitBtn   .addActionListener(e -> panel.enterExitMode());
+        eraseBtn  .addActionListener(e -> panel.enterEraseWallMode());
+        remedyBtn .addActionListener(e -> panel.enterRemedyVoronoiMode());
+        deleteJBtn.addActionListener(e -> panel.enterDeleteJunctionMode());
 
-        // View toggles
+        // ---- View bar --------------------------------------------------------
         JPanel viewBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         viewBar.setBorder(BorderFactory.createTitledBorder("View"));
 
-        JButton gridBtn = new JButton("Grid");
-        JButton trajBtn = new JButton("Trajectories");
-        gridBtn.addActionListener(e -> panel.toggleGrid());
-        trajBtn.addActionListener(e -> panel.toggleTrajectories());
+        JButton gridBtn    = new JButton("Grid");
+        JButton trajBtn    = new JButton("Trajectories");
+        JButton densityBtn = new JButton("Density Map");
+
+        gridBtn.addActionListener(e    -> panel.toggleGrid());
+        trajBtn.addActionListener(e    -> panel.toggleTrajectories());
+        densityBtn.addActionListener(e -> onShowDensityMap());
         viewBar.add(gridBtn);
         viewBar.add(trajBtn);
+        viewBar.add(densityBtn);
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
-        toolbar.add(mazeBar);
-        toolbar.add(editBar);
-        toolbar.add(viewBar);
+        // ---- Analysis bar ----------------------------------------------------
+        JPanel analysisBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        analysisBar.setBorder(BorderFactory.createTitledBorder("Analysis"));
+
+        JToggleButton skelBtn    = new JToggleButton("Skeleton");
+        JToggleButton vorBtn     = new JToggleButton("Voronoi");
+        JToggleButton degBtn     = new JToggleButton("Degrees");
+        JButton       ragBtn     = new JButton("Show RAG");
+        JButton       saveVorBtn = new JButton("Save Voronoi…");
+        JButton       loadVorBtn = new JButton("Load Voronoi…");
+        JButton       resetVorBtn= new JButton("Reset Voronoi");
+
+        skelBtn.addActionListener(e -> { ensureAnalyzed(); panel.toggleSkeleton(); });
+        vorBtn .addActionListener(e -> { ensureAnalyzed(); panel.toggleVoronoi(); });
+        degBtn .addActionListener(e -> { ensureAnalyzed(); panel.toggleDegrees(); });
+        ragBtn    .addActionListener(e -> onShowRAG());
+        saveVorBtn.addActionListener(e -> onSaveVoronoi());
+        loadVorBtn.addActionListener(e -> onLoadVoronoi());
+        resetVorBtn.addActionListener(e -> onResetVoronoi());
+
+        for (JComponent c : new JComponent[]{skelBtn, vorBtn, degBtn, ragBtn, saveVorBtn, loadVorBtn, resetVorBtn})
+            analysisBar.add(c);
+
+        // ---- Assemble rows ---------------------------------------------------
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row1.add(mazeBar);
+        row1.add(editBar);
+        row1.add(viewBar);
+
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row2.add(analysisBar);
+
+        JPanel toolbar = new JPanel();
+        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.Y_AXIS));
+        toolbar.add(row1);
+        toolbar.add(row2);
         return toolbar;
     }
 
@@ -220,17 +276,16 @@ public class ButtonAction {
         JButton listBtn      = new JButton("Show Bacteria List");
         JButton helpBtn      = new JButton("?  Help");
 
-        fastBtn.addActionListener(e -> onRunFast());
-        animBtn.addActionListener(e -> onRunAnimated());
-        stopBtn.addActionListener(e -> runner.stop());
+        fastBtn.addActionListener(e     -> onRunFast());
+        animBtn.addActionListener(e     -> onRunAnimated());
+        stopBtn.addActionListener(e     -> runner.stop());
         resetSimBtn.addActionListener(e -> onResetSimulation());
-        resetMazeBtn.addActionListener(e -> onResetMaze());
-        listBtn.addActionListener(e -> onShowBacteriaList());
-        helpBtn.addActionListener(e -> onShowHelp());
+        resetMazeBtn.addActionListener(e-> onResetMaze());
+        listBtn.addActionListener(e     -> onShowBacteriaList());
+        helpBtn.addActionListener(e     -> onShowHelp());
 
         for (JButton b : new JButton[]{fastBtn, animBtn, stopBtn, resetSimBtn, resetMazeBtn, listBtn, helpBtn})
             rp.add(b);
-
         outer.add(rp);
         outer.add(Box.createVerticalGlue());
         return outer;
@@ -264,7 +319,9 @@ public class ButtonAction {
     private void loadCustomCSV() {
         JFileChooser fc = new JFileChooser();
         fc.setDialogTitle("Load Maze CSV");
+        if (lastCsvDir != null) fc.setCurrentDirectory(lastCsvDir);
         if (fc.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+        lastCsvDir = fc.getSelectedFile().getParentFile();
         try {
             int[][] grid = MazeIO.importFromCSV(fc.getSelectedFile());
             Maze m = new Maze(grid.length, grid[0].length, 7);
@@ -278,12 +335,91 @@ public class ButtonAction {
     private void onSaveMaze() {
         JFileChooser fc = new JFileChooser();
         fc.setDialogTitle("Save Maze as CSV");
+        if (lastCsvDir != null) fc.setCurrentDirectory(lastCsvDir);
         if (fc.showSaveDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+        lastCsvDir = fc.getSelectedFile().getParentFile();
         try {
             MazeIO.saveToCSV(mazeRef[0], fc.getSelectedFile());
         } catch (Exception ex) {
             error("Error saving: " + ex.getMessage());
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Analysis actions
+    // -------------------------------------------------------------------------
+    private RAG ensureAnalyzed() {
+        if (ragRef[0] == null) {
+            RAG rag = new RAG(new Voronoi(new Skeleton()));
+            rag.build(mazeRef[0]);
+            ragRef[0] = rag;
+            panel.setAnalyzer(rag);
+        }
+        return ragRef[0];
+    }
+
+    private void onLoadVoronoi() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Load Voronoi CSV");
+        if (lastVoronoiDir != null) fc.setCurrentDirectory(lastVoronoiDir);
+        if (fc.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+        lastVoronoiDir = fc.getSelectedFile().getParentFile();
+        try {
+            int[][] grid = VoronoiMap.load(fc.getSelectedFile());
+            importedVoronoiGrid = VoronoiMap.deepCopy(grid);
+            RAG rag = new RAG(new Voronoi(new Skeleton()));
+            rag.loadFromVoronoi(grid, mazeRef[0]);
+            ragRef[0] = rag;
+            panel.setAnalyzer(rag);
+            panel.repaint();
+        } catch (Exception ex) {
+            error("Error loading voronoi: " + ex.getMessage());
+        }
+    }
+
+    private void onSaveVoronoi() {
+        if (ragRef[0] == null || !ragRef[0].isReady()) {
+            error("No voronoi data to save. Run analysis or load a voronoi file first."); return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Save Voronoi as CSV");
+        if (lastVoronoiDir != null) fc.setCurrentDirectory(lastVoronoiDir);
+        if (fc.showSaveDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+        lastVoronoiDir = fc.getSelectedFile().getParentFile();
+        try {
+            VoronoiMap.save(ragRef[0].getRegionMap(), fc.getSelectedFile());
+        } catch (Exception ex) {
+            error("Error saving voronoi: " + ex.getMessage());
+        }
+    }
+
+    private void onResetVoronoi() {
+        if (importedVoronoiGrid == null) return; // no-op if nothing was imported
+        try {
+            ragRef[0].resetToImported(importedVoronoiGrid, mazeRef[0]);
+            panel.repaint();
+        } catch (Exception ex) {
+            error("Error resetting voronoi: " + ex.getMessage());
+        }
+    }
+
+    private void onShowRAG() {
+        RAG rag = ensureAnalyzed();
+        JFrame ragFrame = new JFrame("RAG Graph");
+        ragFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        ragFrame.add(new JScrollPane(new RAGPanel(mazeRef[0], rag)));
+        ragFrame.pack();
+        ragFrame.setLocationRelativeTo(frame);
+        ragFrame.setVisible(true);
+    }
+
+    private void onShowDensityMap() {
+        JFrame dmFrame = new JFrame("Density Map");
+        dmFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        dmFrame.add(new JScrollPane(new DensityMapPanel(mazeRef[0])));
+        dmFrame.pack();
+        dmFrame.setLocationRelativeTo(frame);
+        dmFrame.setVisible(true);
     }
 
     // -------------------------------------------------------------------------
@@ -322,7 +458,6 @@ public class ButtonAction {
         runner.runAnimated(mazeRef[0], collectParams(), panel);
     }
 
-    // Clears all bacteria; resets velocity/stdDev fields to current species defaults.
     private void onResetSimulation() {
         runner.stop();
         mazeRef[0].clearBacteria();
@@ -335,7 +470,6 @@ public class ButtonAction {
         panel.repaint();
     }
 
-    // Reverts maze to its last-loaded state; does NOT touch bacteria or velocity fields.
     private void onResetMaze() {
         if (savedMazeGrid == null) return;
         runner.stop();
@@ -366,10 +500,58 @@ public class ButtonAction {
         table.getColumn("Trajectory").setCellEditor(new ButtonEditor(maze));
         table.setRowHeight(24);
 
+        JPanel exportPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        JButton expPixelBtn   = new JButton("Export Pixel Counts (.xlsx)");
+        JButton expTrajBtn    = new JButton("Export Trajectories (.xlsx)");
+        JButton expSummaryBtn = new JButton("Export Step Summary (.xlsx)");
+        JButton expVisitBtn   = new JButton("Export Visit Matrix (.xlsx)");
+        JButton expSuccBtn    = new JButton("Export Successful Visit Matrix (.xlsx)");
+        if (ragRef[0] == null || !ragRef[0].isReady()) {
+            expVisitBtn.setEnabled(false);
+            expSuccBtn.setEnabled(false);
+        }
+
         JFrame listFrame = new JFrame("Bacteria List");
         listFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        listFrame.add(new JScrollPane(table));
-        listFrame.setSize(560, 300);
+
+        expPixelBtn.addActionListener(e -> {
+            JFileChooser fc = chooser("Export Pixel Counts");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try { Analysis.exportPixelCounts(maze, fc.getSelectedFile()); }
+            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
+        });
+        expTrajBtn.addActionListener(e -> {
+            JFileChooser fc = chooser("Export Trajectories");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try { Analysis.exportTrajectories(maze, fc.getSelectedFile()); }
+            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
+        });
+        expSummaryBtn.addActionListener(e -> {
+            JFileChooser fc = chooser("Export Step Summary");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try { Analysis.exportStepSummary(maze, fc.getSelectedFile()); }
+            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
+        });
+        expVisitBtn.addActionListener(e -> {
+            JFileChooser fc = chooser("Export Visit Matrix");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try { Analysis.exportVisitMatrix(maze, ragRef[0], fc.getSelectedFile()); }
+            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
+        });
+        expSuccBtn.addActionListener(e -> {
+            JFileChooser fc = chooser("Export Successful Visit Matrix");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try { Analysis.exportSuccessfulVisitMatrix(maze, ragRef[0], fc.getSelectedFile()); }
+            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
+        });
+
+        for (JButton b : new JButton[]{expPixelBtn, expTrajBtn, expSummaryBtn, expVisitBtn, expSuccBtn})
+            exportPanel.add(b);
+
+        listFrame.setLayout(new BorderLayout());
+        listFrame.add(new JScrollPane(table), BorderLayout.CENTER);
+        listFrame.add(exportPanel, BorderLayout.SOUTH);
+        listFrame.setSize(750, 360);
         listFrame.setLocationRelativeTo(frame);
         listFrame.setVisible(true);
     }
@@ -384,15 +566,20 @@ public class ButtonAction {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
-
-    // Swap the active maze, save its grid for potential maze-reset, update the panel.
     private void swapMaze(Maze m) {
         runner.stop();
         savedMazeGrid = captureMazeGrid(m);
         mazeRef[0] = m;
         panel.setMaze(m);
         ragRef[0] = null;
+        importedVoronoiGrid = null;
         panel.repaint();
+    }
+
+    private JFileChooser chooser(String title) {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle(title);
+        return fc;
     }
 
     private SimulationParameters collectParams() {

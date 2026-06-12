@@ -16,4 +16,8 @@ public interface MovementModel {
     // Compute the movement direction angle (radians) without applying it.
     // Source: SURE.Bacterium#directionWithMemory(Maze, double)
     double computeDirection(Bacterium bacterium, Maze maze, double noiseBound);
+
+    // Dry-run: sample the next step's randomness, store as pending, compute predicted
+    // position and collision info into bacterium probe fields. Does NOT advance state.
+    void probeFullStep(Bacterium bacterium, Maze maze, int dt);
 }
