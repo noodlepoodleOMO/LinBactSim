@@ -152,14 +152,17 @@ public class ButtonAction {
         JToggleButton wallBtn    = new JToggleButton("Draw Wall");
         JToggleButton exitBtn    = new JToggleButton("Draw Exit");
         JToggleButton eraseBtn   = new JToggleButton("Erase");
+
+        // remedyBtn and deleteJBtn live in the Analysis bar but share this group
         JToggleButton remedyBtn  = new JToggleButton("Remedy Voronoi");
         JToggleButton deleteJBtn = new JToggleButton("Delete Junction");
 
         ButtonGroup editGroup = new ButtonGroup();
-        for (JToggleButton tb : new JToggleButton[]{selectBtn, wallBtn, exitBtn, eraseBtn, remedyBtn, deleteJBtn}) {
+        for (JToggleButton tb : new JToggleButton[]{selectBtn, wallBtn, exitBtn, eraseBtn, remedyBtn, deleteJBtn})
             editGroup.add(tb);
+        for (JToggleButton tb : new JToggleButton[]{selectBtn, wallBtn, exitBtn, eraseBtn})
             editBar.add(tb);
-        }
+
         selectBtn .addActionListener(e -> panel.enterSelectMode());
         wallBtn   .addActionListener(e -> panel.enterWallMode());
         exitBtn   .addActionListener(e -> panel.enterExitMode());
@@ -202,7 +205,7 @@ public class ButtonAction {
         loadVorBtn.addActionListener(e -> onLoadVoronoi());
         resetVorBtn.addActionListener(e -> onResetVoronoi());
 
-        for (JComponent c : new JComponent[]{skelBtn, vorBtn, degBtn, ragBtn, saveVorBtn, loadVorBtn, resetVorBtn})
+        for (JComponent c : new JComponent[]{skelBtn, vorBtn, degBtn, ragBtn, saveVorBtn, loadVorBtn, resetVorBtn, remedyBtn, deleteJBtn})
             analysisBar.add(c);
 
         // ---- Assemble rows ---------------------------------------------------
