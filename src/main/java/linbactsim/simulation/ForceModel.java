@@ -127,6 +127,7 @@ public class ForceModel implements MovementModel {
     // -------------------------------------------------------------------------
     public void probeFullStep(Bacterium bacterium, Maze maze, int dt) {
         if (bacterium.hasExited()) return;
+        bacterium.setProbeSlideInfo(null);
 
         bacterium.ensureHeadingInitialized();
         int[] pos = bacterium.getPosition();
@@ -185,6 +186,7 @@ public class ForceModel implements MovementModel {
         double verticalDir = Math.sin(dir), horizontalDir = Math.cos(dir);
 
         double stepDist = displacement(bacterium, dt);
+        bacterium.setLastSampledDisplacement(stepDist);
         bacterium.setPendingDisplacement(stepDist);
 
         int newRow = (int)(row + verticalDir   * stepDist);
@@ -194,7 +196,7 @@ public class ForceModel implements MovementModel {
             int b2 = maze.getBoundaryThickness();
             int cr = Math.max(b2, Math.min(newRow, maze.getNumRows()-1-b2));
             int cc = Math.max(b2, Math.min(newCol, maze.getNumCols()-1-b2));
-            int[][] sd = computeSlideDestination(maze, row, col, cr, cc, dir, stepDist);
+            int[][] sd = computeSlideDestination(maze, row, col, cr, cc, dir, stepDist, bacterium);
             if (sd != null)
                 bacterium.setProbeResult(sd[1][0], sd[1][1], true,
                         new int[]{sd[0][0], sd[0][1]}, new int[]{sd[1][0], sd[1][1]});
@@ -215,7 +217,7 @@ public class ForceModel implements MovementModel {
             int b2 = maze.getBoundaryThickness();
             int cr = Math.max(b2, Math.min(newRow, maze.getNumRows()-1-b2));
             int cc = Math.max(b2, Math.min(newCol, maze.getNumCols()-1-b2));
-            int[][] sd = computeSlideDestination(maze, row, col, cr, cc, dir, stepDist);
+            int[][] sd = computeSlideDestination(maze, row, col, cr, cc, dir, stepDist, bacterium);
             if (sd != null)
                 bacterium.setProbeResult(sd[1][0], sd[1][1], true,
                         new int[]{sd[0][0], sd[0][1]}, new int[]{sd[1][0], sd[1][1]});
@@ -229,7 +231,8 @@ public class ForceModel implements MovementModel {
     // -------------------------------------------------------------------------
     private int[][] computeSlideDestination(Maze maze, int row, int col,
                                             int clampedNewRow, int clampedNewCol,
-                                            double originalDir, double totalDist) {
+                                            double originalDir, double totalDist,
+                                            Bacterium bacterium) {
         List<Pixel> path = maze.getPixelsOnLine(row, col, clampedNewRow, clampedNewCol);
         int lastFreeRow = row, lastFreeCol = col;
         Pixel collisionPixel = null;
@@ -243,25 +246,75 @@ public class ForceModel implements MovementModel {
         double remaining = totalDist - usedDist;
         if (remaining < 0.5) return null;
 
-        int wRow = collisionPixel.getRow(), wCol = collisionPixel.getCol();
-        boolean horizontalWall = maze.isWall(wRow, wCol-1) || maze.isWall(wRow, wCol+1);
-        boolean verticalWall   = maze.isWall(wRow-1, wCol) || maze.isWall(wRow+1, wCol);
-
-        double vertDir = Math.sin(originalDir), horizDir = Math.cos(originalDir);
-        int slideDirRow = 0, slideDirCol = 0;
-        if (horizontalWall)   slideDirCol = (horizDir > 0 ? 1 : -1);
-        else if (verticalWall) slideDirRow = (vertDir  > 0 ? 1 : -1);
-        else return new int[][]{{lastFreeRow, lastFreeCol}, {lastFreeRow, lastFreeCol}};
-
-        int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
-        int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
-
-        List<Pixel> slidePath = maze.getPixelsOnLine(lastFreeRow, lastFreeCol, sRow, sCol);
         int slideEndRow = lastFreeRow, slideEndCol = lastFreeCol;
-        for (Pixel p : slidePath) {
-            if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) break;
-            slideEndRow = p.getRow(); slideEndCol = p.getCol();
+        StringBuilder slideLog = new StringBuilder();
+        int maxSlides = 5;
+
+        while (remaining > 0.5 && maxSlides-- > 0) {
+            int wRow = collisionPixel.getRow(), wCol = collisionPixel.getCol();
+            int dRow = wRow - lastFreeRow, dCol = wCol - lastFreeCol;
+            double vertDir = Math.sin(originalDir), horizDir = Math.cos(originalDir);
+            int slideDirRow = 0, slideDirCol = 0;
+            String entryTag;
+
+            if (dRow == 0) {
+                entryTag = "horiz";
+                slideDirRow = (vertDir >= 0 ? 1 : -1);
+            } else if (dCol == 0) {
+                entryTag = "vert";
+                slideDirCol = (horizDir >= 0 ? 1 : -1);
+            } else {
+                boolean canSlideRow = !maze.isWall(wRow, wCol - dCol);
+                boolean canSlideCol = !maze.isWall(wRow - dRow, wCol);
+                if (canSlideRow && !canSlideCol) {
+                    entryTag = "diag"; slideDirRow = (vertDir >= 0 ? 1 : -1);
+                } else if (canSlideCol && !canSlideRow) {
+                    entryTag = "diag"; slideDirCol = (horizDir >= 0 ? 1 : -1);
+                } else if (canSlideRow) {
+                    entryTag = "diag(corner)";
+                    if (RandomNumberGenerator.getRandomPosition(2) == 0) slideDirRow = (vertDir  >= 0 ? 1 : -1);
+                    else                                                  slideDirCol = (horizDir >= 0 ? 1 : -1);
+                } else {
+                    if (slideLog.length() > 0) slideLog.append("\n");
+                    slideLog.append(wRow).append(",").append(wCol).append(";")
+                            .append(lastFreeRow).append(",").append(lastFreeCol)
+                            .append(";concave→stop");
+                    break;
+                }
+            }
+
+            String dirTag = (slideDirRow > 0) ? "↓" : (slideDirRow < 0) ? "↑"
+                          : (slideDirCol > 0) ? "→" : "←";
+            if (slideLog.length() > 0) slideLog.append("\n");
+            slideLog.append(wRow).append(",").append(wCol).append(";")
+                    .append(lastFreeRow).append(",").append(lastFreeCol).append(";")
+                    .append(entryTag).append(" ").append(dirTag);
+
+            int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
+            int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
+            List<Pixel> slidePath = maze.getPixelsOnLine(lastFreeRow, lastFreeCol, sRow, sCol);
+            int curEndRow = lastFreeRow, curEndCol = lastFreeCol;
+            Pixel nextCollision = null;
+            for (Pixel p : slidePath) {
+                if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) { nextCollision = p; break; }
+                curEndRow = p.getRow(); curEndCol = p.getCol();
+            }
+            slideEndRow = curEndRow; slideEndCol = curEndCol;
+
+            if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
+                slideLog.append("(blocked)"); break;
+            }
+            if (nextCollision == null) { remaining = 0; break; }
+
+            double slidedDist = Math.sqrt((slideEndRow - lastFreeRow) * (double)(slideEndRow - lastFreeRow)
+                                        + (slideEndCol - lastFreeCol) * (double)(slideEndCol - lastFreeCol));
+            remaining -= slidedDist;
+            lastFreeRow = slideEndRow; lastFreeCol = slideEndCol;
+            collisionPixel = nextCollision;
+            originalDir = Math.atan2(slideDirRow, slideDirCol);
         }
+
+        if (bacterium != null) bacterium.setProbeSlideInfo(slideLog.length() > 0 ? slideLog.toString() : null);
         return new int[][]{{lastFreeRow, lastFreeCol}, {slideEndRow, slideEndCol}};
     }
 
@@ -290,26 +343,56 @@ public class ForceModel implements MovementModel {
         double remaining = totalDist - usedDist;
         if (remaining < 0.5) { bacterium.addTime(dt); return; }
 
-        int wRow = collisionPixel.getRow(), wCol = collisionPixel.getCol();
-        boolean horizontalWall = maze.isWall(wRow, wCol-1) || maze.isWall(wRow, wCol+1);
-        boolean verticalWall   = maze.isWall(wRow-1, wCol) || maze.isWall(wRow+1, wCol);
+        int maxSlides = 5;
+        while (remaining > 0.5 && maxSlides-- > 0) {
+            int wRow = collisionPixel.getRow(), wCol = collisionPixel.getCol();
+            int dRow = wRow - lastFreeRow, dCol = wCol - lastFreeCol;
+            double vertDir = Math.sin(originalDir), horizDir = Math.cos(originalDir);
+            int slideDirRow = 0, slideDirCol = 0;
+            boolean concave = false;
 
-        double vertDir = Math.sin(originalDir), horizDir = Math.cos(originalDir);
-        int slideDirRow = 0, slideDirCol = 0;
-        if (horizontalWall)   slideDirCol = (horizDir > 0 ? 1 : -1);
-        else if (verticalWall) slideDirRow = (vertDir  > 0 ? 1 : -1);
-        else { bacterium.addTime(dt); return; }
+            if (dRow == 0) {
+                slideDirRow = (vertDir >= 0 ? 1 : -1);
+            } else if (dCol == 0) {
+                slideDirCol = (horizDir >= 0 ? 1 : -1);
+            } else {
+                boolean canSlideRow = !maze.isWall(wRow, wCol - dCol);
+                boolean canSlideCol = !maze.isWall(wRow - dRow, wCol);
+                if      (canSlideRow && !canSlideCol) { slideDirRow = (vertDir  >= 0 ? 1 : -1); }
+                else if (canSlideCol && !canSlideRow) { slideDirCol = (horizDir >= 0 ? 1 : -1); }
+                else if (canSlideRow) {
+                    if (RandomNumberGenerator.getRandomPosition(2) == 0) slideDirRow = (vertDir  >= 0 ? 1 : -1);
+                    else                                                  slideDirCol = (horizDir >= 0 ? 1 : -1);
+                } else { concave = true; }
+            }
 
-        int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
-        int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
+            if (concave) { bacterium.setHeading(0.0, 0.0); break; }
 
-        List<Pixel> slidePath = maze.getPixelsOnLine(lastFreeRow, lastFreeCol, sRow, sCol);
-        for (Pixel p : slidePath) {
-            if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) break;
-            bacterium.setContinuousPosition(p.getRow(), p.getCol());
-            bacterium.recordPosition(p.getRow(), p.getCol());
-            maze.getPixel(p.getRow(), p.getCol()).addCount();
-            if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
+            int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
+            int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
+            List<Pixel> slidePath = maze.getPixelsOnLine(lastFreeRow, lastFreeCol, sRow, sCol);
+            int slideEndRow = lastFreeRow, slideEndCol = lastFreeCol;
+            Pixel nextCollision = null;
+            for (Pixel p : slidePath) {
+                if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) { nextCollision = p; break; }
+                slideEndRow = p.getRow(); slideEndCol = p.getCol();
+                bacterium.setContinuousPosition(slideEndRow, slideEndCol);
+                bacterium.recordPosition(slideEndRow, slideEndCol);
+                maze.getPixel(slideEndRow, slideEndCol).addCount();
+                if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
+            }
+
+            if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
+                bacterium.setHeading(0.0, 0.0); break;
+            }
+            if (nextCollision == null) { remaining = 0; break; }
+
+            double slidedDist = Math.sqrt((slideEndRow - lastFreeRow) * (double)(slideEndRow - lastFreeRow)
+                                        + (slideEndCol - lastFreeCol) * (double)(slideEndCol - lastFreeCol));
+            remaining -= slidedDist;
+            lastFreeRow = slideEndRow; lastFreeCol = slideEndCol;
+            collisionPixel = nextCollision;
+            originalDir = Math.atan2(slideDirRow, slideDirCol);
         }
         bacterium.addTime(dt);
     }

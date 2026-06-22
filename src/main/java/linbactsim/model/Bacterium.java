@@ -58,6 +58,8 @@ public class Bacterium {
     private boolean probeHadCollision = false;
     private int[]   probeLastFreePos  = null;
     private int[]   probeSlidePos     = null;
+    private double  lastSampledDisplacement = 0.0;
+    private String  probeSlideInfo          = null;
 
     // Source: SURE.Bacterium(int, int, double, int, int, double, double, BacteriumSpecies)
     // velocity and stdDev are now fixed per-species; they are no longer constructor params.
@@ -263,4 +265,10 @@ public class Bacterium {
     public boolean isProbeHadCollision()  { return probeHadCollision; }
     public int[]   getProbeLastFreePos()  { return probeLastFreePos; }
     public int[]   getProbeSlidePos()     { return probeSlidePos; }
+
+    public void   setLastSampledDisplacement(double d) { this.lastSampledDisplacement = d; }
+    public double getLastSampledDisplacement()         { return lastSampledDisplacement; }
+
+    public void   setProbeSlideInfo(String s) { this.probeSlideInfo = s; }
+    public String getProbeSlideInfo()          { return probeSlideInfo; }
 }

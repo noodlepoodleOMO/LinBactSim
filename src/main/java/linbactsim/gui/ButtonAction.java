@@ -352,7 +352,7 @@ public class ButtonAction {
     // Analysis actions
     // -------------------------------------------------------------------------
     private RAG ensureAnalyzed() {
-        if (ragRef[0] == null) {
+        if (ragRef[0] == null || !ragRef[0].isReady()) {
             RAG rag = new RAG(new Voronoi(new Skeleton()));
             rag.build(mazeRef[0]);
             ragRef[0] = rag;
@@ -397,13 +397,9 @@ public class ButtonAction {
     }
 
     private void onResetVoronoi() {
-        if (importedVoronoiGrid == null) return; // no-op if nothing was imported
-        try {
-            ragRef[0].resetToImported(importedVoronoiGrid, mazeRef[0]);
-            panel.repaint();
-        } catch (Exception ex) {
-            error("Error resetting voronoi: " + ex.getMessage());
-        }
+        if (ragRef[0] == null) return;
+        ragRef[0].clearVoronoi();
+        panel.repaint();
     }
 
     private void onShowRAG() {

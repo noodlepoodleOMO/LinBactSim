@@ -54,7 +54,7 @@ public class MazePanel extends JPanel {
         this.maze     = maze;
         this.showGrid = true;
 
-        setPreferredSize(new Dimension(1000, 700));
+        updatePreferredSize();
         setToolTipText(" ");
         ToolTipManager.sharedInstance().setDismissDelay(Integer.MAX_VALUE);
         ToolTipManager.sharedInstance().setInitialDelay(200);
@@ -175,7 +175,7 @@ public class MazePanel extends JPanel {
                 }
                 if (remedyDragging && currentMode == EditMode.REMEDY_VORONOI
                         && rag != null && rag.isReady()
-                        && remedySelectedJunctionId != 0) {
+                        && remedySelectedJunctionId != -1) {
                     rag.getVoronoi().reassignRegion(row, col, remedySelectedJunctionId, maze);
                     repaint();
                 }
@@ -190,8 +190,6 @@ public class MazePanel extends JPanel {
                 if (!maze.isValid(row, col)) return;
 
                 if (currentMode == EditMode.REMEDY_VORONOI && rag != null && rag.isReady()) {
-                    int[][] rm = rag.getRegionMap();
-                    remedySelectedJunctionId = (rm != null) ? rm[row][col] : 0;
                     remedyDragging = true;
                     return;
                 }
@@ -218,9 +216,20 @@ public class MazePanel extends JPanel {
             }
 
             @Override public void mouseClicked(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) return;
                 int cs  = maze.getDisplayPixelSize();
                 int col = e.getX() / cs, row = e.getY() / cs;
-                if (currentMode != EditMode.SELECT || !SwingUtilities.isLeftMouseButton(e)) return;
+
+                if (currentMode == EditMode.REMEDY_VORONOI && rag != null && rag.isReady()) {
+                    int[][] rm = rag.getRegionMap();
+                    if (rm != null && maze.isValid(row, col)) {
+                        remedySelectedJunctionId = rm[row][col];
+                        repaint();
+                    }
+                    return;
+                }
+
+                if (currentMode != EditMode.SELECT) return;
                 if (!maze.isValid(row, col)) { hideHoverWindow(); repaint(); return; }
 
                 if (e.isShiftDown()) {
@@ -310,6 +319,21 @@ public class MazePanel extends JPanel {
                     g.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), 80));
                     g.fillRect(c * cs, r * cs, cs, cs);
                 }
+            }
+        }
+
+        // 2b. REMEDY_VORONOI: highlight selected region at full opacity
+        if (currentMode == EditMode.REMEDY_VORONOI && remedySelectedJunctionId != -1
+                && rag != null && rag.isReady()) {
+            int[][] rm = rag.getRegionMap();
+            if (rm != null) {
+                Color base = rag.getRegionColor(remedySelectedJunctionId);
+                for (int r = 0; r < rows; r++)
+                    for (int c = 0; c < cols; c++)
+                        if (rm[r][c] == remedySelectedJunctionId) {
+                            g.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), 200));
+                            g.fillRect(c * cs, r * cs, cs, cs);
+                        }
             }
         }
 
@@ -432,18 +456,27 @@ public class MazePanel extends JPanel {
 
             sb.append("<br>Inertia:   (r=").append(fmt(b.getHeadingRow()))
               .append(", c=").append(fmt(b.getHeadingCol())).append(")");
+            sb.append("<br>Step dist: ").append(fmt(b.getLastSampledDisplacement())).append(" px");
 
             int[] probe = b.getProbeNextPos();
             if (probe != null) {
-                sb.append("<br>Predicted pos: [").append(probe[0]).append(", ").append(probe[1]).append("]");
                 if (b.isProbeHadCollision()) {
-                    int[] lf = b.getProbeLastFreePos();
-                    int[] sl = b.getProbeSlidePos();
-                    if (lf != null)
-                        sb.append("<br>Last free px: [").append(lf[0]).append(", ").append(lf[1]).append("]");
-                    if (sl != null)
-                        sb.append("<br>After slide:  [").append(sl[0]).append(", ").append(sl[1]).append("]");
+                    String si = b.getProbeSlideInfo();
+                    if (si != null) {
+                        String[] entries = si.split("\n");
+                        for (int i = 0; i < entries.length; i++) {
+                            String[] parts = entries[i].split(";", 3);
+                            if (parts.length == 3)
+                                sb.append("<br>Col ").append(i + 1)
+                                  .append(": [").append(parts[0]).append("]")
+                                  .append(" Free: [").append(parts[1]).append("]")
+                                  .append(" ").append(parts[2]);
+                            else
+                                sb.append("<br>Col ").append(i + 1).append(": ").append(entries[i]);
+                        }
+                    }
                 }
+                sb.append("<br>Predicted pos: [").append(probe[0]).append(", ").append(probe[1]).append("]");
             }
         }
         sb.append("</html>");
@@ -535,7 +568,7 @@ public class MazePanel extends JPanel {
     public void enterWallMode()           { setEditMode(EditMode.WALL);           hideHoverWindow(); repaint(); }
     public void enterExitMode()           { setEditMode(EditMode.EXIT);           hideHoverWindow(); repaint(); }
     public void enterEraseWallMode()      { setEditMode(EditMode.ERASE_WALL);     hideHoverWindow(); repaint(); }
-    public void enterRemedyVoronoiMode()  { setEditMode(EditMode.REMEDY_VORONOI); remedySelectedJunctionId = -1; hideHoverWindow(); repaint(); }
+    public void enterRemedyVoronoiMode()  { setEditMode(EditMode.REMEDY_VORONOI); remedySelectedJunctionId = -1; showVoronoi = true; hideHoverWindow(); repaint(); }
     public void enterDeleteJunctionMode() { setEditMode(EditMode.DELETE_JUNCTION); hideHoverWindow(); repaint(); }
 
     public void setAnalyzer(RAG rag) { this.rag = rag; }
@@ -559,6 +592,13 @@ public class MazePanel extends JPanel {
         exitPoints.clear();
         rag = null;
         bacteriumHoverWindow.setVisible(false);
+        updatePreferredSize();
+        revalidate();
+    }
+
+    private void updatePreferredSize() {
+        int cs = maze.getDisplayPixelSize();
+        setPreferredSize(new Dimension(maze.getNumCols() * cs, maze.getNumRows() * cs));
     }
 
     public void setStartPointListener(Consumer<Point> l) { startPointListener = l; }

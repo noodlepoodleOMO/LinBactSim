@@ -46,6 +46,13 @@ public class RAG {
         buildRAG(maze.getNumRows(), maze.getNumCols());
     }
 
+    // Clears all Voronoi and RAG state so nothing is displayed.
+    public void clearVoronoi() {
+        voronoi.setRegionMap(null);
+        adjacency     = null;
+        edgeEndpoints = null;
+    }
+
     // Source: SURE.SkeletonAnalyzer#buildRAG(int, int)
     private void buildRAG(int rows, int cols) {
         int[][] regionMap = voronoi.getRegionMap();
