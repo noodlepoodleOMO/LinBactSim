@@ -271,4 +271,10 @@ public class Bacterium {
 
     public void   setProbeSlideInfo(String s) { this.probeSlideInfo = s; }
     public String getProbeSlideInfo()          { return probeSlideInfo; }
+
+    // ---- Probed wall pixels (set by probeFullStep for display) ----
+    private List<int[]> lastProbedWallPixels = null;
+
+    public void        setLastProbedWallPixels(List<int[]> pixels) { this.lastProbedWallPixels = pixels; }
+    public List<int[]> getLastProbedWallPixels()                   { return lastProbedWallPixels; }
 }

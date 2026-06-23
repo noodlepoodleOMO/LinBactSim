@@ -451,6 +451,15 @@ public class MazePanel extends JPanel {
             double[] wall = b.getLastWallVector();
             sb.append("<br>Wall vec: (r=").append(fmt(wall[0])).append(", c=").append(fmt(wall[1])).append(")");
 
+            List<int[]> probed = b.getLastProbedWallPixels();
+            if (probed != null && !probed.isEmpty()) {
+                sb.append("<br>Probed walls (").append(probed.size()).append("): ");
+                for (int i = 0; i < probed.size(); i++) {
+                    if (i > 0 && i % 8 == 0) sb.append("<br>&nbsp;&nbsp;");
+                    sb.append("(").append(probed.get(i)[0]).append(",").append(probed.get(i)[1]).append(") ");
+                }
+            }
+
             double[] noise = b.getLastNoiseVector();
             sb.append("<br>Noise vec: (r=").append(fmt(noise[0])).append(", c=").append(fmt(noise[1])).append(")");
 

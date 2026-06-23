@@ -12,6 +12,7 @@ import linbactsim.resources.BacteriumSpecies;
 import linbactsim.resources.MazeMaps;
 import linbactsim.resources.UserGuide;
 import linbactsim.simulation.ForceModel;
+import linbactsim.simulation.ForceModel4Ray;
 import linbactsim.simulation.MovementModel;
 import linbactsim.simulation.SimulationParameters;
 import linbactsim.simulation.SimulationRunner;
@@ -61,7 +62,7 @@ public class ButtonAction {
     private final JComboBox<BacteriumSpecies> speciesComboBox =
             new JComboBox<>(BacteriumSpecies.DEFAULT_SPECIES);
     private final JComboBox<String> modelComboBox =
-            new JComboBox<>(new String[]{"Weibull", "Force"});
+            new JComboBox<>(new String[]{"Weibull", "Force 4", "Force 360"});
 
     // -------------------------------------------------------------------------
     // Entry point — called from Main.main()
@@ -102,8 +103,12 @@ public class ButtonAction {
             }
         });
         modelComboBox.addItemListener(e -> {
-            if (e.getStateChange() == ItemEvent.SELECTED)
-                runner.setMovementModel("Force".equals(e.getItem()) ? new ForceModel() : new WeibullModel());
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                String sel = (String) e.getItem();
+                if      ("Force 360".equals(sel)) runner.setMovementModel(new ForceModel());
+                else if ("Force 4".equals(sel))   runner.setMovementModel(new ForceModel4Ray());
+                else                              runner.setMovementModel(new WeibullModel());
+            }
         });
 
         frame = buildMainFrame();

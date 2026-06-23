@@ -4,6 +4,7 @@ import linbactsim.model.Bacterium;
 import linbactsim.model.Maze;
 import linbactsim.model.Pixel;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // Weibull-weighted run-and-tumble movement model.
@@ -134,6 +135,7 @@ public class WeibullModel implements MovementModel {
     public void probeFullStep(Bacterium bacterium, Maze maze, int dt) {
         if (bacterium.hasExited()) return;
         bacterium.setProbeSlideInfo(null);
+        bacterium.setLastProbedWallPixels(null);
 
         // --- Compute direction (mirrors computeDirection but does NOT call setHeading) ---
         bacterium.ensureHeadingInitialized();
@@ -141,6 +143,14 @@ public class WeibullModel implements MovementModel {
         int row = pos[0], col = pos[1];
 
         double[] d = getDistanceToWall(maze, row, col, bacterium.getWeibullPixelSize());
+
+        // Collect the 4 directional wall pixels for display
+        List<int[]> probedPixels = new ArrayList<>();
+        int[] wUp    = getFirstWallPixel(maze, row, col, -1,  0); if (wUp    != null) probedPixels.add(wUp);
+        int[] wDown  = getFirstWallPixel(maze, row, col,  1,  0); if (wDown  != null) probedPixels.add(wDown);
+        int[] wRight = getFirstWallPixel(maze, row, col,  0,  1); if (wRight != null) probedPixels.add(wRight);
+        int[] wLeft  = getFirstWallPixel(maze, row, col,  0, -1); if (wLeft  != null) probedPixels.add(wLeft);
+        bacterium.setLastProbedWallPixels(probedPixels);
         double ceo1 = weibullPDF(d[0], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
         double ceo2 = weibullPDF(d[1], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
         double ceo3 = weibullPDF(d[2], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
@@ -273,11 +283,27 @@ public class WeibullModel implements MovementModel {
             String entryTag;
 
             if (dRow == 0) {
-                entryTag = "horiz";
-                slideDirRow = (vertDir >= 0 ? 1 : -1);
+                int primary = (vertDir >= 0 ? 1 : -1);
+                if (!maze.isWall(lastFreeRow + primary, lastFreeCol)) {
+                    entryTag = "horiz"; slideDirRow = primary;
+                } else {
+                    if (slideLog.length() > 0) slideLog.append("\n");
+                    slideLog.append(wRow).append(",").append(wCol).append(";")
+                            .append(lastFreeRow).append(",").append(lastFreeCol)
+                            .append(";concave→stop");
+                    break;
+                }
             } else if (dCol == 0) {
-                entryTag = "vert";
-                slideDirCol = (horizDir >= 0 ? 1 : -1);
+                int primary = (horizDir >= 0 ? 1 : -1);
+                if (!maze.isWall(lastFreeRow, lastFreeCol + primary)) {
+                    entryTag = "vert"; slideDirCol = primary;
+                } else {
+                    if (slideLog.length() > 0) slideLog.append("\n");
+                    slideLog.append(wRow).append(",").append(wCol).append(";")
+                            .append(lastFreeRow).append(",").append(lastFreeCol)
+                            .append(";concave→stop");
+                    break;
+                }
             } else {
                 boolean canSlideRow = !maze.isWall(wRow, wCol - dCol);
                 boolean canSlideCol = !maze.isWall(wRow - dRow, wCol);
@@ -344,6 +370,17 @@ public class WeibullModel implements MovementModel {
         return multiplier * (part1 * part2 * part3) - baseline;
     }
 
+    // Returns the first wall pixel in direction (dr, dc) from (row, col), or null if none.
+    private static int[] getFirstWallPixel(Maze maze, int row, int col, int dr, int dc) {
+        int r = row + dr, c = col + dc;
+        while (maze.isValid(r, c) && !maze.isWall(r, c)) {
+            if (maze.getPixel(r, c).isExit()) return null;
+            r += dr; c += dc;
+        }
+        if (maze.isValid(r, c) && maze.isWall(r, c)) return new int[]{r, c};
+        return null;
+    }
+
     // Source: SURE.Bacterium#getDistanceToWall(Maze, int, int)
     // Returns [up, down, right, left] distances to nearest wall in physical units.
     public double[] getDistanceToWall(Maze maze, int row, int col, double pixelsize) {
@@ -396,9 +433,13 @@ public class WeibullModel implements MovementModel {
             boolean concave = false;
 
             if (dRow == 0) {
-                slideDirRow = (vertDir >= 0 ? 1 : -1);
+                int primary = (vertDir >= 0 ? 1 : -1);
+                if (!maze.isWall(lastFreeRow + primary, lastFreeCol)) { slideDirRow = primary; }
+                else                                                   { concave = true; }
             } else if (dCol == 0) {
-                slideDirCol = (horizDir >= 0 ? 1 : -1);
+                int primary = (horizDir >= 0 ? 1 : -1);
+                if (!maze.isWall(lastFreeRow, lastFreeCol + primary)) { slideDirCol = primary; }
+                else                                                   { concave = true; }
             } else {
                 boolean canSlideRow = !maze.isWall(wRow, wCol - dCol);
                 boolean canSlideCol = !maze.isWall(wRow - dRow, wCol);

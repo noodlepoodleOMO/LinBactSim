@@ -7,10 +7,10 @@ import linbactsim.model.Pixel;
 import java.util.ArrayList;
 import java.util.List;
 
-// Inverse-Boltzmann force-field movement model.
-// Same blend/memory/noise structure as WeibullModel; differs only in how the
-// wall interaction vector is computed.
-public class ForceModel implements MovementModel {
+// Inverse-Boltzmann force-field model using 4 axis-aligned rays (up/down/left/right).
+// Wall vector = fUp-fDown (row), fLeft-fRight (col). Identical slide/movement logic
+// to ForceModel; only the wall-vector computation differs.
+public class ForceModel4Ray implements MovementModel {
 
     @Override
     public void step(Bacterium bacterium, Maze maze, int dt) {
@@ -65,8 +65,10 @@ public class ForceModel implements MovementModel {
         double fRight = bacterium.forceAtDistance(d[2]);
         double fLeft  = bacterium.forceAtDistance(d[3]);
 
-        double[] wv = computeMultiAngleWallVector(maze, row, col, bacterium);
-        double wallRow = wv[0], wallCol = wv[1];
+        double wallRow = fUp - fDown;
+        double wallCol = fLeft - fRight;
+        double[] wallU = unit(wallRow, wallCol);
+        wallRow = wallU[0]; wallCol = wallU[1];
 
         double headingRow = bacterium.getHeadingRow();
         double headingCol = bacterium.getHeadingCol();
@@ -92,8 +94,7 @@ public class ForceModel implements MovementModel {
             noiseCol = noiseU[1];
         }
 
-        // Store vectors for display
-        bacterium.setLastVectorInfo("Force360", d,
+        bacterium.setLastVectorInfo("Force4", d,
                 new double[]{fUp, fDown, fRight, fLeft},
                 wallRow, wallCol, noiseRow, noiseCol);
 
@@ -124,6 +125,7 @@ public class ForceModel implements MovementModel {
     // -------------------------------------------------------------------------
     // probeFullStep — dry-run: compute full next step without modifying state.
     // -------------------------------------------------------------------------
+    @Override
     public void probeFullStep(Bacterium bacterium, Maze maze, int dt) {
         if (bacterium.hasExited()) return;
         bacterium.setProbeSlideInfo(null);
@@ -139,9 +141,17 @@ public class ForceModel implements MovementModel {
         double fRight = bacterium.forceAtDistance(d[2]);
         double fLeft  = bacterium.forceAtDistance(d[3]);
 
+        double wallRow = fUp - fDown;
+        double wallCol = fLeft - fRight;
+        double[] wallU = unit(wallRow, wallCol);
+        wallRow = wallU[0]; wallCol = wallU[1];
+
+        // Collect the 4 directional wall pixels for display
         List<int[]> probedPixels = new ArrayList<>();
-        double[] wv2 = computeMultiAngleWallVector(maze, row, col, bacterium, probedPixels);
-        double wallRow = wv2[0], wallCol = wv2[1];
+        int[] wUp    = getFirstWallPixel(maze, row, col, -1,  0); if (wUp    != null) probedPixels.add(wUp);
+        int[] wDown  = getFirstWallPixel(maze, row, col,  1,  0); if (wDown  != null) probedPixels.add(wDown);
+        int[] wRight = getFirstWallPixel(maze, row, col,  0,  1); if (wRight != null) probedPixels.add(wRight);
+        int[] wLeft  = getFirstWallPixel(maze, row, col,  0, -1); if (wLeft  != null) probedPixels.add(wLeft);
         bacterium.setLastProbedWallPixels(probedPixels);
 
         double headingRow = bacterium.getHeadingRow();
@@ -160,7 +170,7 @@ public class ForceModel implements MovementModel {
         double noiseRow = noiseU[0], noiseCol = noiseU[1];
 
         bacterium.setPendingNoise(noiseRow, noiseCol);
-        bacterium.setLastVectorInfo("Force360", d,
+        bacterium.setLastVectorInfo("Force4", d,
                 new double[]{fUp, fDown, fRight, fLeft},
                 wallRow, wallCol, noiseRow, noiseCol);
 
@@ -438,63 +448,22 @@ public class ForceModel implements MovementModel {
         return result;
     }
 
+    // Returns the first wall pixel in direction (dr, dc) from (row, col), or null if none.
+    private static int[] getFirstWallPixel(Maze maze, int row, int col, int dr, int dc) {
+        int r = row + dr, c = col + dc;
+        while (maze.isValid(r, c) && !maze.isWall(r, c)) {
+            if (maze.getPixel(r, c).isExit()) return null;
+            r += dr; c += dc;
+        }
+        if (maze.isValid(r, c) && maze.isWall(r, c)) return new int[]{r, c};
+        return null;
+    }
+
     public static double norm(double a, double b)  { return Math.sqrt(a*a + b*b); }
 
     public static double[] unit(double a, double b) {
         double n = norm(a, b);
         if (n < 1e-12) return new double[]{0.0, 0.0};
         return new double[]{a/n, b/n};
-    }
-
-    // -------------------------------------------------------------------------
-    // Multi-angle wall force sampling
-    // -------------------------------------------------------------------------
-
-    private static final int NUM_WALL_ANGLES = 360;
-
-    private double[] computeMultiAngleWallVector(Maze maze, int row, int col, Bacterium bacterium) {
-        return computeMultiAngleWallVector(maze, row, col, bacterium, null);
-    }
-
-    // Casts NUM_WALL_ANGLES rays, deduplicates first-hit wall pixels, sums
-    // per-pixel force contributions resolved into (row, col) components, and
-    // returns the normalized wall unit vector. Optionally collects unique wall
-    // pixel coordinates into pixelOut (pass null to skip collection).
-    private double[] computeMultiAngleWallVector(Maze maze, int row, int col, Bacterium bacterium,
-                                                 List<int[]> pixelOut) {
-        int rows = maze.getNumRows(), cols = maze.getNumCols();
-        int maxLen = (int) Math.ceil(Math.sqrt((double) rows * rows + (double) cols * cols));
-        boolean[][] seen = new boolean[rows][cols];
-        double wallRow = 0, wallCol = 0;
-        double pixelSize = bacterium.getForcePixelSize();
-
-        for (int i = 0; i < NUM_WALL_ANGLES; i++) {
-            double angle = 2.0 * Math.PI * i / NUM_WALL_ANGLES;
-            int endRow = (int) Math.round(row + Math.sin(angle) * maxLen);
-            int endCol = (int) Math.round(col + Math.cos(angle) * maxLen);
-            endRow = Math.max(0, Math.min(rows - 1, endRow));
-            endCol = Math.max(0, Math.min(cols - 1, endCol));
-
-            List<Pixel> ray = maze.getPixelsOnLine(row, col, endRow, endCol);
-            for (int j = 1; j < ray.size(); j++) {
-                Pixel p = ray.get(j);
-                int pr = p.getRow(), pc = p.getCol();
-                if (!maze.isValid(pr, pc) || p.isWall()) {
-                    if (maze.isValid(pr, pc) && !seen[pr][pc]) {
-                        seen[pr][pc] = true;
-                        if (pixelOut != null) pixelOut.add(new int[]{pr, pc});
-                        double dr = row - pr, dc = col - pc;
-                        double dist = Math.sqrt(dr * dr + dc * dc);
-                        if (dist > 1e-9) {
-                            double f = bacterium.forceAtDistance(dist * pixelSize);
-                            wallRow += f * dr / dist;
-                            wallCol += f * dc / dist;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        return unit(wallRow, wallCol);
     }
 }
