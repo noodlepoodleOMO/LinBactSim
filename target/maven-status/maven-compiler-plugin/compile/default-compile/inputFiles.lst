@@ -1,8 +1,11 @@
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/Main.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/BulkSimulation.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/HistogramSimilarity.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/RAG.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/Skeleton.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/VertexCount.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/Voronoi.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/gui/BulkResultsFrame.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/gui/ButtonAction.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/gui/ButtonEditor.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/gui/ButtonRenderer.java

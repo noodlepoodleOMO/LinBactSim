@@ -680,20 +680,27 @@ public class ButtonAction {
             worker.execute();
         });
 
-        JPanel bottomPanel = new JPanel(new FlowLayout());
-        bottomPanel.add(downloadButton);
-        bottomPanel.add(downloadSummaryButton);
-        bottomPanel.add(averageTrajectoryButton);
-        bottomPanel.add(exportVisitMatrixButton);
-        bottomPanel.add(exportSuccessfulVisitMatrixButton);
-        bottomPanel.add(exportVertexCountButton);
-        bottomPanel.add(exportSuccessfulVertexCountButton);
-        bottomPanel.add(runBulkAnalysisButton);
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        row1.add(downloadButton);
+        row1.add(downloadSummaryButton);
+        row1.add(averageTrajectoryButton);
+        row1.add(exportVisitMatrixButton);
+        row1.add(exportSuccessfulVisitMatrixButton);
+
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        row2.add(exportVertexCountButton);
+        row2.add(exportSuccessfulVertexCountButton);
+        row2.add(runBulkAnalysisButton);
+
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
+        bottomPanel.add(row1);
+        bottomPanel.add(row2);
 
         listFrame.setLayout(new BorderLayout());
         listFrame.add(new JScrollPane(table), BorderLayout.CENTER);
         listFrame.add(bottomPanel, BorderLayout.SOUTH);
-        listFrame.setSize(1200, 400);
+        listFrame.setSize(1200, 460);
         listFrame.setVisible(true);
     }
 
