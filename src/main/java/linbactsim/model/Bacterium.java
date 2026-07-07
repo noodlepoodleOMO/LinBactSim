@@ -180,6 +180,8 @@ public class Bacterium {
     // Getters — Source: SURE.Bacterium
     // -------------------------------------------------------------------------
 
+    public int              getLength()          { return length; }
+    public int              getWidth()           { return width; }
     public double           getVelocity()        { return species.getVelocity(); }
     public double           getStdDev()          { return species.getVelocityStdDev(); }
     public double           getNoise()           { return noise; }
@@ -271,6 +273,13 @@ public class Bacterium {
 
     public void   setProbeSlideInfo(String s) { this.probeSlideInfo = s; }
     public String getProbeSlideInfo()          { return probeSlideInfo; }
+
+    // ---- One-shot noise burst after concave-corner collision ----
+    private boolean concaveNoiseBurst = false;
+
+    public void    scheduleConcaveNoiseBurst() { this.concaveNoiseBurst = true; }
+    public boolean hasConcaveNoiseBurst()      { return concaveNoiseBurst; }
+    public void    consumeConcaveNoiseBurst()  { this.concaveNoiseBurst = false; }
 
     // ---- Probed wall pixels (set by probeFullStep for display) ----
     private List<int[]> lastProbedWallPixels = null;

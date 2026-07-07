@@ -13,6 +13,7 @@ linbactsim/gui/ButtonEditor.class
 linbactsim/analysis/Skeleton.class
 linbactsim/io/VoronoiMap.class
 linbactsim/gui/ButtonAction.class
+linbactsim/simulation/WeibullForceModel.class
 linbactsim/resources/InfernoColorMap.class
 linbactsim/gui/MazePanel$EditMode.class
 linbactsim/gui/MazePanel$3.class
@@ -23,7 +24,9 @@ linbactsim/io/Analysis.class
 linbactsim/simulation/ChemotaxisModel.class
 linbactsim/simulation/BacteriaTracking.class
 linbactsim/gui/ButtonRenderer.class
+linbactsim/analysis/VertexCount.class
 linbactsim/resources/BacteriumSpecies.class
+linbactsim/simulation/ForceModel4Ray.class
 linbactsim/io/BulkSim.class
 linbactsim/gui/RAGPanel.class
 linbactsim/resources/MazeMaps.class
@@ -35,4 +38,6 @@ linbactsim/simulation/SimulationTracking.class
 linbactsim/model/Bacterium.class
 linbactsim/gui/DensityMapPanel$RenderMode.class
 linbactsim/model/Pixel.class
+linbactsim/simulation/ForceModel4RayCutoff.class
 linbactsim/model/Maze.class
+linbactsim/gui/ButtonAction$1.class

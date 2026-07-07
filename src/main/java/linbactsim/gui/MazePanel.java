@@ -448,8 +448,16 @@ public class MazePanel extends JPanel {
               .append(" rt=").append(fmt(raw[2]))
               .append(" lt=").append(fmt(raw[3]));
 
-            double[] wall = b.getLastWallVector();
-            sb.append("<br>Wall vec: (r=").append(fmt(wall[0])).append(", c=").append(fmt(wall[1])).append(")");
+            double[] wall  = b.getLastWallVector();
+            double[] noise = b.getLastNoiseVector();
+            double   wMem  = b.getWMemory(), wNoi = b.getWNoise(), wWal = b.getWWall();
+            double   hRow  = b.getHeadingRow(), hCol = b.getHeadingCol();
+
+            sb.append("<br>Weights: mem=").append(fmt(wMem))
+              .append(" noise=").append(fmt(wNoi))
+              .append(" wall=").append(fmt(wWal));
+
+            sb.append("<br>Wall   ×w: (r=").append(fmt(wWal * wall[0])).append(", c=").append(fmt(wWal * wall[1])).append(")");
 
             List<int[]> probed = b.getLastProbedWallPixels();
             if (probed != null && !probed.isEmpty()) {
@@ -460,11 +468,13 @@ public class MazePanel extends JPanel {
                 }
             }
 
-            double[] noise = b.getLastNoiseVector();
-            sb.append("<br>Noise vec: (r=").append(fmt(noise[0])).append(", c=").append(fmt(noise[1])).append(")");
+            sb.append("<br>Noise  ×w: (r=").append(fmt(wNoi * noise[0])).append(", c=").append(fmt(wNoi * noise[1])).append(")");
+            sb.append("<br>Inertia×w: (r=").append(fmt(wMem * hRow)).append(", c=").append(fmt(wMem * hCol)).append(")");
 
-            sb.append("<br>Inertia:   (r=").append(fmt(b.getHeadingRow()))
-              .append(", c=").append(fmt(b.getHeadingCol())).append(")");
+            double combRow = wMem * hRow + wNoi * noise[0] + wWal * wall[0];
+            double combCol = wMem * hCol + wNoi * noise[1] + wWal * wall[1];
+            sb.append("<br>Combined:  (r=").append(fmt(combRow)).append(", c=").append(fmt(combCol)).append(")");
+
             sb.append("<br>Step dist: ").append(fmt(b.getLastSampledDisplacement())).append(" px");
 
             int[] probe = b.getProbeNextPos();

@@ -7,7 +7,10 @@
       "Bash(javac -cp /workspace/src/main/java /workspace/src/main/java/linbactsim/model/Pixel.java /workspace/src/main/java/linbactsim/model/Maze.java /workspace/src/main/java/linbactsim/resources/BacteriumSpecies.java /workspace/src/main/java/linbactsim/simulation/RandomNumberGenerator.java /workspace/src/main/java/linbactsim/simulation/MovementModel.java /workspace/src/main/java/linbactsim/model/Bacterium.java /workspace/src/main/java/linbactsim/simulation/CurrentModel.java)",
       "Bash(which java *)",
       "Read(//usr/**)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(javac -cp src/main/java src/main/java/linbactsim/simulation/ForceModel4RayCutoff.java)",
+      "Bash(find /usr /opt /home -name \"mvn\" 2>/dev/null | head -5; which java 2>/dev/null; ls /workspace/)",
+      "Read(//home/**)"
     ]
   }
 }

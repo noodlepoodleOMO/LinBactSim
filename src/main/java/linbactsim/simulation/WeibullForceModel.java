@@ -7,11 +7,14 @@ import linbactsim.model.Pixel;
 import java.util.ArrayList;
 import java.util.List;
 
-// Weibull-weighted run-and-tumble movement model.
-// All physics extracted from SURE.Bacterium.
-public class WeibullModel implements MovementModel {
+// WeibullModel with ForceModel4Ray wall-collision handling:
+// direction computation is identical to WeibullModel; applyRandomCorrection
+// adds scheduleConcaveNoiseBurst() on concave stops, and computeDirection
+// handles the resulting noise burst the same way ForceModel4Ray does.
+public class WeibullForceModel implements MovementModel {
 
-    // Source: SURE.Bacterium#move(Maze, int)
+    private static final double CONCAVE_NOISE_BURST_FACTOR = 5.0;
+
     @Override
     public void step(Bacterium bacterium, Maze maze, int dt) {
         if (bacterium.hasExited()) return;
@@ -51,7 +54,6 @@ public class WeibullModel implements MovementModel {
         }
     }
 
-    // Source: SURE.Bacterium#directionWithMemory(Maze, double)
     @Override
     public double computeDirection(Bacterium bacterium, Maze maze, double noiseBound) {
         bacterium.ensureHeadingInitialized();
@@ -84,7 +86,14 @@ public class WeibullModel implements MovementModel {
             currentAngle = Math.random() * 2.0 * Math.PI;
 
         double noiseRow, noiseCol;
-        if (bacterium.hasPendingNoise()) {
+        if (bacterium.hasConcaveNoiseBurst()) {
+            if (bacterium.hasPendingNoise()) bacterium.consumePendingNoise();
+            double dTheta     = RandomNumberGenerator.getAngleNoise(Math.PI);
+            double noisyAngle = currentAngle + dTheta;
+            double[] noiseU   = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
+            noiseRow = noiseU[0];
+            noiseCol = noiseU[1];
+        } else if (bacterium.hasPendingNoise()) {
             double[] pending = bacterium.consumePendingNoise();
             noiseRow = pending[0];
             noiseCol = pending[1];
@@ -96,13 +105,28 @@ public class WeibullModel implements MovementModel {
             noiseCol = noiseU[1];
         }
 
-        // Store vectors for display
-        bacterium.setLastVectorInfo("Weibull", d,
+        bacterium.setLastVectorInfo("WeibullF", d,
                 new double[]{ceo1, ceo2, ceo3, ceo4},
                 wallRow, wallCol, noiseRow, noiseCol);
 
-        double combRow = bacterium.getWMemory() * headingRow + bacterium.getWNoise() * noiseRow + bacterium.getWWall() * wallRow;
-        double combCol = bacterium.getWMemory() * headingCol + bacterium.getWNoise() * noiseCol + bacterium.getWWall() * wallCol;
+        double effWMemory, effWNoise, effWWall;
+        if (bacterium.hasConcaveNoiseBurst()) {
+            double rawMem   = bacterium.getWMemory();
+            double rawNoise = bacterium.getWNoise() * CONCAVE_NOISE_BURST_FACTOR;
+            double rawWall  = bacterium.getWWall();
+            double sum      = rawMem + rawNoise + rawWall;
+            effWMemory = rawMem   / sum;
+            effWNoise  = rawNoise / sum;
+            effWWall   = rawWall  / sum;
+            bacterium.consumeConcaveNoiseBurst();
+        } else {
+            effWMemory = bacterium.getWMemory();
+            effWNoise  = bacterium.getWNoise();
+            effWWall   = bacterium.getWWall();
+        }
+
+        double combRow = effWMemory * headingRow + effWNoise * noiseRow + effWWall * wallRow;
+        double combCol = effWMemory * headingCol + effWNoise * noiseCol + effWWall * wallCol;
 
         if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
 
@@ -127,30 +151,24 @@ public class WeibullModel implements MovementModel {
         return Math.atan2(combRow, combCol);
     }
 
-    // -------------------------------------------------------------------------
-    // probeFullStep — dry-run: compute full next step without modifying state.
-    // Pre-samples noise + displacement and stores as pending so the first
-    // continuation step uses the exact same values.
-    // -------------------------------------------------------------------------
     public void probeFullStep(Bacterium bacterium, Maze maze, int dt) {
         if (bacterium.hasExited()) return;
         bacterium.setProbeSlideInfo(null);
         bacterium.setLastProbedWallPixels(null);
 
-        // --- Compute direction (mirrors computeDirection but does NOT call setHeading) ---
         bacterium.ensureHeadingInitialized();
         int[] pos = bacterium.getPosition();
         int row = pos[0], col = pos[1];
 
         double[] d = getDistanceToWall(maze, row, col, bacterium.getWeibullPixelSize());
 
-        // Collect the 4 directional wall pixels for display
         List<int[]> probedPixels = new ArrayList<>();
         int[] wUp    = getFirstWallPixel(maze, row, col, -1,  0); if (wUp    != null) probedPixels.add(wUp);
         int[] wDown  = getFirstWallPixel(maze, row, col,  1,  0); if (wDown  != null) probedPixels.add(wDown);
         int[] wRight = getFirstWallPixel(maze, row, col,  0,  1); if (wRight != null) probedPixels.add(wRight);
         int[] wLeft  = getFirstWallPixel(maze, row, col,  0, -1); if (wLeft  != null) probedPixels.add(wLeft);
         bacterium.setLastProbedWallPixels(probedPixels);
+
         double ceo1 = weibullPDF(d[0], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
         double ceo2 = weibullPDF(d[1], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
         double ceo3 = weibullPDF(d[2], bacterium.getK(), bacterium.getLambda(), bacterium.getMultiplier(), bacterium.getBaseline());
@@ -175,11 +193,8 @@ public class WeibullModel implements MovementModel {
         double[] noiseU = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
         double noiseRow = noiseU[0], noiseCol = noiseU[1];
 
-        // Store as pending so the first actual continuation step uses these exact values
         bacterium.setPendingNoise(noiseRow, noiseCol);
-
-        // Store vectors for display (overwrites last-step values with next-step preview)
-        bacterium.setLastVectorInfo("Weibull", d,
+        bacterium.setLastVectorInfo("WeibullF", d,
                 new double[]{ceo1, ceo2, ceo3, ceo4},
                 wallRow, wallCol, noiseRow, noiseCol);
 
@@ -200,12 +215,10 @@ public class WeibullModel implements MovementModel {
             combRow = bu[0]; combCol = bu[1];
             if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
         }
-        // NOTE: heading is NOT updated here — pure probe
 
         double dir = Math.atan2(combRow, combCol);
         double verticalDir = Math.sin(dir), horizontalDir = Math.cos(dir);
 
-        // Pre-sample displacement and store as pending
         double stepDist = displacement(bacterium, dt);
         bacterium.setLastSampledDisplacement(stepDist);
         bacterium.setPendingDisplacement(stepDist);
@@ -213,13 +226,11 @@ public class WeibullModel implements MovementModel {
         int newRow = (int)(row + verticalDir   * stepDist);
         int newCol = (int)(col + horizontalDir * stepDist);
 
-        // --- Dry-run path check ---
         if (!maze.isValid(newRow, newCol) || maze.isWall(newRow, newCol)) {
-            // Clamp and check slide
-            int boundary2 = maze.getBoundaryThickness();
-            int clampedRow = Math.max(boundary2, Math.min(newRow, maze.getNumRows()-1-boundary2));
-            int clampedCol = Math.max(boundary2, Math.min(newCol, maze.getNumCols()-1-boundary2));
-            int[][] sd = computeSlideDestination(maze, row, col, clampedRow, clampedCol, dir, stepDist, bacterium);
+            int b2 = maze.getBoundaryThickness();
+            int cr = Math.max(b2, Math.min(newRow, maze.getNumRows()-1-b2));
+            int cc = Math.max(b2, Math.min(newCol, maze.getNumCols()-1-b2));
+            int[][] sd = computeSlideDestination(maze, row, col, cr, cc, dir, stepDist, bacterium);
             if (sd != null)
                 bacterium.setProbeResult(sd[1][0], sd[1][1], true,
                         new int[]{sd[0][0], sd[0][1]}, new int[]{sd[1][0], sd[1][1]});
@@ -233,15 +244,14 @@ public class WeibullModel implements MovementModel {
         for (Pixel p : path) { if (p.isWall()) { collision = true; break; } }
 
         if (!collision) {
-            // Find last pixel on path (may be shorter than newRow/newCol)
             int pr = row, pc = col;
             for (int i = 1; i < path.size(); i++) { pr = path.get(i).getRow(); pc = path.get(i).getCol(); }
             bacterium.setProbeResult(pr, pc, false, null, null);
         } else {
-            int boundary2 = maze.getBoundaryThickness();
-            int clampedRow = Math.max(boundary2, Math.min(newRow, maze.getNumRows()-1-boundary2));
-            int clampedCol = Math.max(boundary2, Math.min(newCol, maze.getNumCols()-1-boundary2));
-            int[][] sd = computeSlideDestination(maze, row, col, clampedRow, clampedCol, dir, stepDist, bacterium);
+            int b2 = maze.getBoundaryThickness();
+            int cr = Math.max(b2, Math.min(newRow, maze.getNumRows()-1-b2));
+            int cc = Math.max(b2, Math.min(newCol, maze.getNumCols()-1-b2));
+            int[][] sd = computeSlideDestination(maze, row, col, cr, cc, dir, stepDist, bacterium);
             if (sd != null)
                 bacterium.setProbeResult(sd[1][0], sd[1][1], true,
                         new int[]{sd[0][0], sd[0][1]}, new int[]{sd[1][0], sd[1][1]});
@@ -250,10 +260,6 @@ public class WeibullModel implements MovementModel {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // computeSlideDestination — read-only helper extracted from applyRandomCorrection.
-    // Returns int[][]{lastFreePos, slideEndPos}, or null if no useful slide.
-    // -------------------------------------------------------------------------
     private int[][] computeSlideDestination(Maze maze, int row, int col,
                                             int clampedNewRow, int clampedNewCol,
                                             double originalDir, double totalDist,
@@ -359,46 +365,6 @@ public class WeibullModel implements MovementModel {
         return new int[][]{{lastFreeRow, lastFreeCol}, {slideEndRow, slideEndCol}};
     }
 
-    // Source: SURE.Bacterium#weibullPDF(double, double, double, double, double)
-    public double weibullPDF(double x, double k, double lambda,
-                             double multiplier, double baseline) {
-        if (x < 0) return 0.0;
-        if (x > 20) baseline = 0;
-        double part1 = k / lambda;
-        double part2 = Math.pow(x / lambda, k - 1);
-        double part3 = Math.exp(-Math.pow(x / lambda, k));
-        return multiplier * (part1 * part2 * part3) - baseline;
-    }
-
-    // Returns the first wall pixel in direction (dr, dc) from (row, col), or null if none.
-    private static int[] getFirstWallPixel(Maze maze, int row, int col, int dr, int dc) {
-        int r = row + dr, c = col + dc;
-        while (maze.isValid(r, c) && !maze.isWall(r, c)) {
-            if (maze.getPixel(r, c).isExit()) return null;
-            r += dr; c += dc;
-        }
-        if (maze.isValid(r, c) && maze.isWall(r, c)) return new int[]{r, c};
-        return null;
-    }
-
-    // Source: SURE.Bacterium#getDistanceToWall(Maze, int, int)
-    // Returns [up, down, right, left] distances to nearest wall in physical units.
-    public double[] getDistanceToWall(Maze maze, int row, int col, double pixelsize) {
-        double[] result = new double[4];
-        int r, c;
-        r = row - 1;
-        while (maze.isValid(r, col) && !maze.isWall(r, col)) { result[0]++; if (maze.getPixel(r, col).isExit()) break; r--; }
-        r = row + 1;
-        while (maze.isValid(r, col) && !maze.isWall(r, col)) { result[1]++; if (maze.getPixel(r, col).isExit()) break; r++; }
-        c = col + 1;
-        while (maze.isValid(row, c) && !maze.isWall(row, c)) { result[2]++; if (maze.getPixel(row, c).isExit()) break; c++; }
-        c = col - 1;
-        while (maze.isValid(row, c) && !maze.isWall(row, c)) { result[3]++; if (maze.getPixel(row, c).isExit()) break; c--; }
-        for (int i = 0; i < 4; i++) result[i] = (result[i] == 0) ? 0.00001 : result[i] * pixelsize;
-        return result;
-    }
-
-    // Source: SURE.Bacterium#applyRandomCorrection(Maze, int, int, int, int, int, double)
     public void applyRandomCorrection(Maze maze, int row, int col,
                                       int newRow, int newCol,
                                       int dt, double originalDir,
@@ -451,7 +417,7 @@ public class WeibullModel implements MovementModel {
                 } else { concave = true; }
             }
 
-            if (concave) { bacterium.setHeading(0.0, 0.0); break; }
+            if (concave) { bacterium.setHeading(0.0, 0.0); bacterium.scheduleConcaveNoiseBurst(); break; }
 
             int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
             int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
@@ -468,7 +434,7 @@ public class WeibullModel implements MovementModel {
             }
 
             if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
-                bacterium.setHeading(0.0, 0.0); break;
+                bacterium.setHeading(0.0, 0.0); bacterium.scheduleConcaveNoiseBurst(); break;
             }
             if (nextCollision == null) { remaining = 0; break; }
 
@@ -482,27 +448,51 @@ public class WeibullModel implements MovementModel {
         bacterium.addTime(dt);
     }
 
-    // Source: SURE.Bacterium#displacement(int)
     public double displacement(Bacterium bacterium, int dt) {
         double noise = RandomNumberGenerator.getDisplacementNoise(bacterium.getStdDev());
         return (bacterium.getVelocity() + noise) * dt;
     }
 
-    // -------------------------------------------------------------------------
-    // Static math helpers — Source: SURE.Bacterium
-    // -------------------------------------------------------------------------
-
-    public static double clamp(double v, double lo, double hi) {
-        return Math.max(lo, Math.min(hi, v));
+    public double[] getDistanceToWall(Maze maze, int row, int col, double pixelsize) {
+        double[] result = new double[4];
+        int r, c;
+        r = row - 1;
+        while (maze.isValid(r, col) && !maze.isWall(r, col)) { result[0]++; if (maze.getPixel(r, col).isExit()) break; r--; }
+        r = row + 1;
+        while (maze.isValid(r, col) && !maze.isWall(r, col)) { result[1]++; if (maze.getPixel(r, col).isExit()) break; r++; }
+        c = col + 1;
+        while (maze.isValid(row, c) && !maze.isWall(row, c)) { result[2]++; if (maze.getPixel(row, c).isExit()) break; c++; }
+        c = col - 1;
+        while (maze.isValid(row, c) && !maze.isWall(row, c)) { result[3]++; if (maze.getPixel(row, c).isExit()) break; c--; }
+        for (int i = 0; i < 4; i++) result[i] = (result[i] == 0) ? 0.00001 : result[i] * pixelsize;
+        return result;
     }
 
-    public static double norm(double a, double b) {
-        return Math.sqrt(a * a + b * b);
+    private static int[] getFirstWallPixel(Maze maze, int row, int col, int dr, int dc) {
+        int r = row + dr, c = col + dc;
+        while (maze.isValid(r, c) && !maze.isWall(r, c)) {
+            if (maze.getPixel(r, c).isExit()) return null;
+            r += dr; c += dc;
+        }
+        if (maze.isValid(r, c) && maze.isWall(r, c)) return new int[]{r, c};
+        return null;
     }
+
+    public double weibullPDF(double x, double k, double lambda,
+                             double multiplier, double baseline) {
+        if (x < 0) return 0.0;
+        if (x > 20) baseline = 0;
+        double part1 = k / lambda;
+        double part2 = Math.pow(x / lambda, k - 1);
+        double part3 = Math.exp(-Math.pow(x / lambda, k));
+        return multiplier * (part1 * part2 * part3) - baseline;
+    }
+
+    public static double norm(double a, double b)  { return Math.sqrt(a*a + b*b); }
 
     public static double[] unit(double a, double b) {
         double n = norm(a, b);
         if (n < 1e-12) return new double[]{0.0, 0.0};
-        return new double[]{a / n, b / n};
+        return new double[]{a/n, b/n};
     }
 }

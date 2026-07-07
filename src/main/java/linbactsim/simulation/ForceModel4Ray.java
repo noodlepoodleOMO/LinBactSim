@@ -12,6 +12,9 @@ import java.util.List;
 // to ForceModel; only the wall-vector computation differs.
 public class ForceModel4Ray implements MovementModel {
 
+    // Noise weight multiplier applied for one step after a concave-corner collision.
+    private static final double CONCAVE_NOISE_BURST_FACTOR = 5.0;
+
     @Override
     public void step(Bacterium bacterium, Maze maze, int dt) {
         if (bacterium.hasExited()) return;
@@ -79,10 +82,19 @@ public class ForceModel4Ray implements MovementModel {
         else if (norm(wallRow, wallCol) >= 1e-9)
             currentAngle = Math.atan2(wallRow, wallCol);
         else
-            currentAngle = Math.PI / 2.0;
+            currentAngle = Math.random() * 2.0 * Math.PI;
 
         double noiseRow, noiseCol;
-        if (bacterium.hasPendingNoise()) {
+        if (bacterium.hasConcaveNoiseBurst()) {
+            // Full-circle noise: discard probe-cached noise (computed with normal bound around
+            // wall angle) and resample from [-π, π] so the bacterium can escape in any direction.
+            if (bacterium.hasPendingNoise()) bacterium.consumePendingNoise();
+            double dTheta     = RandomNumberGenerator.getAngleNoise(Math.PI);
+            double noisyAngle = currentAngle + dTheta;
+            double[] noiseU   = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
+            noiseRow = noiseU[0];
+            noiseCol = noiseU[1];
+        } else if (bacterium.hasPendingNoise()) {
             double[] pending = bacterium.consumePendingNoise();
             noiseRow = pending[0];
             noiseCol = pending[1];
@@ -98,8 +110,24 @@ public class ForceModel4Ray implements MovementModel {
                 new double[]{fUp, fDown, fRight, fLeft},
                 wallRow, wallCol, noiseRow, noiseCol);
 
-        double combRow = bacterium.getWMemory() * headingRow + bacterium.getWNoise() * noiseRow + bacterium.getWWall() * wallRow;
-        double combCol = bacterium.getWMemory() * headingCol + bacterium.getWNoise() * noiseCol + bacterium.getWWall() * wallCol;
+        double effWMemory, effWNoise, effWWall;
+        if (bacterium.hasConcaveNoiseBurst()) {
+            double rawMem   = bacterium.getWMemory();
+            double rawNoise = bacterium.getWNoise() * CONCAVE_NOISE_BURST_FACTOR;
+            double rawWall  = bacterium.getWWall();
+            double sum      = rawMem + rawNoise + rawWall;
+            effWMemory = rawMem   / sum;
+            effWNoise  = rawNoise / sum;
+            effWWall   = rawWall  / sum;
+            bacterium.consumeConcaveNoiseBurst();
+        } else {
+            effWMemory = bacterium.getWMemory();
+            effWNoise  = bacterium.getWNoise();
+            effWWall   = bacterium.getWWall();
+        }
+
+        double combRow = effWMemory * headingRow + effWNoise * noiseRow + effWWall * wallRow;
+        double combCol = effWMemory * headingCol + effWNoise * noiseCol + effWWall * wallCol;
 
         if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
         double[] combU = unit(combRow, combCol);
@@ -162,7 +190,7 @@ public class ForceModel4Ray implements MovementModel {
         else if (norm(wallRow, wallCol) >= 1e-9)
             currentAngle = Math.atan2(wallRow, wallCol);
         else
-            currentAngle = Math.PI / 2.0;
+            currentAngle = Math.random() * 2.0 * Math.PI;
 
         double dTheta = RandomNumberGenerator.getAngleNoise(bacterium.getNoise());
         double noisyAngle = currentAngle + dTheta;
@@ -397,7 +425,7 @@ public class ForceModel4Ray implements MovementModel {
                 } else { concave = true; }
             }
 
-            if (concave) { bacterium.setHeading(0.0, 0.0); break; }
+            if (concave) { bacterium.setHeading(0.0, 0.0); bacterium.scheduleConcaveNoiseBurst(); break; }
 
             int sRow = lastFreeRow + (int) Math.round(slideDirRow * remaining);
             int sCol = lastFreeCol + (int) Math.round(slideDirCol * remaining);
@@ -414,7 +442,7 @@ public class ForceModel4Ray implements MovementModel {
             }
 
             if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
-                bacterium.setHeading(0.0, 0.0); break;
+                bacterium.setHeading(0.0, 0.0); bacterium.scheduleConcaveNoiseBurst(); break;
             }
             if (nextCollision == null) { remaining = 0; break; }
 

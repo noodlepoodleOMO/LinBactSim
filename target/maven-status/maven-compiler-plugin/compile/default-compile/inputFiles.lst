@@ -1,6 +1,7 @@
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/Main.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/RAG.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/Skeleton.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/VertexCount.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/analysis/Voronoi.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/gui/ButtonAction.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/gui/ButtonEditor.java
@@ -25,9 +26,12 @@
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/ChemotaxisModel.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/CoordinateSystem.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/ForceModel.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/ForceModel4Ray.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/ForceModel4RayCutoff.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/MovementModel.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/RandomNumberGenerator.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/SimulationParameters.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/SimulationRunner.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/SimulationTracking.java
+/Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/WeibullForceModel.java
 /Users/ruolinhu/Documents/Biocomputation/LinBactSim/src/main/java/linbactsim/simulation/WeibullModel.java

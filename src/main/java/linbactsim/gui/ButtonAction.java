@@ -13,7 +13,9 @@ import linbactsim.resources.MazeMaps;
 import linbactsim.resources.UserGuide;
 import linbactsim.simulation.ForceModel;
 import linbactsim.simulation.ForceModel4Ray;
+import linbactsim.simulation.ForceModel4RayCutoff;
 import linbactsim.simulation.MovementModel;
+import linbactsim.simulation.WeibullForceModel;
 import linbactsim.simulation.SimulationParameters;
 import linbactsim.simulation.SimulationRunner;
 import linbactsim.simulation.WeibullModel;
@@ -46,12 +48,12 @@ public class ButtonAction {
     // ---- Input fields --------------------------------------------------------
     private final JTextField velocityField = new JTextField("8",   6);
     private final JTextField stdDevField   = new JTextField("3",   6);
-    private final JTextField noiseField    = new JTextField("0.5", 6);
+    private final JTextField noiseField    = new JTextField("0.6", 6);
     private final JTextField dtField       = new JTextField("1",   6);
     private final JTextField durationField = new JTextField("1000",6);
-    private final JTextField wMemoryField  = new JTextField("0.70",6);
-    private final JTextField wNoiseField   = new JTextField("0.10",6);
-    private final JTextField wWallField    = new JTextField("0.20",6);
+    private final JTextField wMemoryField  = new JTextField("0.50",6);
+    private final JTextField wNoiseField   = new JTextField("0.20",6);
+    private final JTextField wWallField    = new JTextField("0.30",6);
     private final JTextField rowField      = new JTextField("-1",  5);
     private final JTextField colField      = new JTextField("-1",  5);
     private final JTextField countField    = new JTextField("1",   5);
@@ -62,7 +64,7 @@ public class ButtonAction {
     private final JComboBox<BacteriumSpecies> speciesComboBox =
             new JComboBox<>(BacteriumSpecies.DEFAULT_SPECIES);
     private final JComboBox<String> modelComboBox =
-            new JComboBox<>(new String[]{"Weibull", "Force 4", "Force 360"});
+            new JComboBox<>(new String[]{"Weibull", "Force 4", "Force 360", "Force 4 (50µm)", "Weibull Force"});
 
     // -------------------------------------------------------------------------
     // Entry point — called from Main.main()
@@ -105,9 +107,11 @@ public class ButtonAction {
         modelComboBox.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 String sel = (String) e.getItem();
-                if      ("Force 360".equals(sel)) runner.setMovementModel(new ForceModel());
-                else if ("Force 4".equals(sel))   runner.setMovementModel(new ForceModel4Ray());
-                else                              runner.setMovementModel(new WeibullModel());
+                if      ("Force 360".equals(sel))    runner.setMovementModel(new ForceModel());
+                else if ("Force 4".equals(sel))      runner.setMovementModel(new ForceModel4Ray());
+                else if ("Force 4 (50µm)".equals(sel))  runner.setMovementModel(new ForceModel4RayCutoff());
+                else if ("Weibull Force".equals(sel))   runner.setMovementModel(new WeibullForceModel());
+                else                                    runner.setMovementModel(new WeibullModel());
             }
         });
 
@@ -488,75 +492,208 @@ public class ButtonAction {
 
     private void onShowBacteriaList() {
         Maze maze = mazeRef[0];
-        String[] cols = {"#", "Species", "Time", "Steps", "Exited", "Trajectory"};
-        Object[][] data = new Object[maze.getBacteriaCount()][6];
+
+        String[] cols = {"Index", "Velocity", "StdDev", "k", "Lambda", "Multiplier", "Baseline", "Noise", "Step Number", "Trajectory Length", "Trajectory"};
+        Object[][] data = new Object[maze.getBacteriaCount()][11];
+        java.util.Map<String, java.util.List<Integer>> trajectoryLengthsBySpecies = new java.util.LinkedHashMap<>();
         for (int i = 0; i < maze.getBacteriaCount(); i++) {
             Bacterium b = maze.getBacterium(i);
-            data[i][0] = i + 1;
-            data[i][1] = b.getSpecies().getName();
-            data[i][2] = b.getTime();
-            data[i][3] = b.getTrajectoryLength();
-            data[i][4] = b.hasExited();
-            data[i][5] = "Show Trajectory";
+            data[i][0]  = i + 1;
+            data[i][1]  = b.getVelocity();
+            data[i][2]  = b.getStdDev();
+            data[i][3]  = b.getK();
+            data[i][4]  = b.getLambda();
+            data[i][5]  = b.getMultiplier();
+            data[i][6]  = b.getBaseline();
+            data[i][7]  = b.getNoise();
+            data[i][8]  = b.getTime();
+            data[i][9]  = b.getTrajectory().size();
+            data[i][10] = "Show Trajectory";
+            trajectoryLengthsBySpecies
+                    .computeIfAbsent(b.getSpecies().getName(), k -> new java.util.ArrayList<>())
+                    .add(b.getTrajectory().size());
         }
-        JTable table = new JTable(data, cols);
+
+        JTable table = new JTable(data, cols) {
+            public boolean isCellEditable(int row, int column) { return column == 10; }
+        };
         table.getColumn("Trajectory").setCellRenderer(new ButtonRenderer());
         table.getColumn("Trajectory").setCellEditor(new ButtonEditor(maze));
-        table.setRowHeight(24);
 
-        JPanel exportPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        JButton expPixelBtn   = new JButton("Export Pixel Counts (.xlsx)");
-        JButton expTrajBtn    = new JButton("Export Trajectories (.xlsx)");
-        JButton expSummaryBtn = new JButton("Export Step Summary (.xlsx)");
-        JButton expVisitBtn   = new JButton("Export Visit Matrix (.xlsx)");
-        JButton expSuccBtn    = new JButton("Export Successful Visit Matrix (.xlsx)");
-        if (ragRef[0] == null || !ragRef[0].isReady()) {
-            expVisitBtn.setEnabled(false);
-            expSuccBtn.setEnabled(false);
-        }
-
-        JFrame listFrame = new JFrame("Bacteria List");
+        JFrame listFrame = new JFrame("Bacteria Properties");
         listFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
-        expPixelBtn.addActionListener(e -> {
-            JFileChooser fc = chooser("Export Pixel Counts");
+        JButton downloadButton = new JButton("Download Trajectories");
+        downloadButton.addActionListener(e -> {
+            JFileChooser fc = chooser("Save Excel File");
             if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
-            try { Analysis.exportPixelCounts(maze, fc.getSelectedFile()); }
-            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
-        });
-        expTrajBtn.addActionListener(e -> {
-            JFileChooser fc = chooser("Export Trajectories");
-            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
-            try { Analysis.exportTrajectories(maze, fc.getSelectedFile()); }
-            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
-        });
-        expSummaryBtn.addActionListener(e -> {
-            JFileChooser fc = chooser("Export Step Summary");
-            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
-            try { Analysis.exportStepSummary(maze, fc.getSelectedFile()); }
-            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
-        });
-        expVisitBtn.addActionListener(e -> {
-            JFileChooser fc = chooser("Export Visit Matrix");
-            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
-            try { Analysis.exportVisitMatrix(maze, ragRef[0], fc.getSelectedFile()); }
-            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
-        });
-        expSuccBtn.addActionListener(e -> {
-            JFileChooser fc = chooser("Export Successful Visit Matrix");
-            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
-            try { Analysis.exportSuccessfulVisitMatrix(maze, ragRef[0], fc.getSelectedFile()); }
-            catch (Exception ex) { error("Export failed: " + ex.getMessage()); }
+            try {
+                Analysis.exportTrajectories(maze, fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "Trajectories exported successfully!");
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error saving Excel file."); }
         });
 
-        for (JButton b : new JButton[]{expPixelBtn, expTrajBtn, expSummaryBtn, expVisitBtn, expSuccBtn})
-            exportPanel.add(b);
+        JButton downloadSummaryButton = new JButton("Download Step Summary");
+        downloadSummaryButton.addActionListener(e -> {
+            JFileChooser fc = chooser("Save Step Summary File");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try {
+                Analysis.exportStepSummary(maze, fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "Step summary exported successfully!");
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error saving summary file."); }
+        });
+
+        JButton averageTrajectoryButton = new JButton("Average Trajectory");
+        averageTrajectoryButton.addActionListener(e -> {
+            JFrame averageFrame = new JFrame("Average Trajectory by Species");
+            averageFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            String[] avgCols = {"Species", "Average Trajectory"};
+            Object[][] avgData = new Object[trajectoryLengthsBySpecies.size()][2];
+            int rowIndex = 0;
+            for (java.util.Map.Entry<String, java.util.List<Integer>> entry : trajectoryLengthsBySpecies.entrySet()) {
+                java.util.List<Integer> lengths = entry.getValue();
+                int sum = 0; for (int len : lengths) sum += len;
+                avgData[rowIndex][0] = entry.getKey();
+                avgData[rowIndex][1] = lengths.isEmpty() ? 0.0 : (double) sum / lengths.size();
+                rowIndex++;
+            }
+            JTable avgTable = new JTable(avgData, avgCols);
+            averageFrame.setLayout(new BorderLayout());
+            averageFrame.add(new JScrollPane(avgTable), BorderLayout.CENTER);
+            averageFrame.setSize(500, 300);
+            averageFrame.setLocationRelativeTo(listFrame);
+            averageFrame.setVisible(true);
+        });
+
+        JButton exportVisitMatrixButton = new JButton("Export Visit Matrix");
+        exportVisitMatrixButton.addActionListener(ev -> {
+            if (ragRef[0] == null || !ragRef[0].isReady()) {
+                JOptionPane.showMessageDialog(listFrame, "Run graph analysis first (Show Skeleton or Load Voronoi).");
+                return;
+            }
+            JFileChooser fc = chooser("Save Visit Matrix CSV");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try {
+                Analysis.exportVisitMatrix(maze, ragRef[0], fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "Visit matrix exported to " + fc.getSelectedFile().getName());
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error: " + ex.getMessage()); }
+        });
+
+        JButton exportSuccessfulVisitMatrixButton = new JButton("Export Successful Visit Matrix");
+        exportSuccessfulVisitMatrixButton.addActionListener(ev -> {
+            if (ragRef[0] == null || !ragRef[0].isReady()) {
+                JOptionPane.showMessageDialog(listFrame, "Run graph analysis first (Show Skeleton or Load Voronoi).");
+                return;
+            }
+            JFileChooser fc = chooser("Save Successful Visit Matrix CSV");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try {
+                Analysis.exportSuccessfulVisitMatrix(maze, ragRef[0], fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "Successful visit matrix exported to " + fc.getSelectedFile().getName());
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error: " + ex.getMessage()); }
+        });
+
+        JButton exportVertexCountButton = new JButton("Export Vertex Count");
+        exportVertexCountButton.addActionListener(ev -> {
+            if (ragRef[0] == null || !ragRef[0].isReady()) {
+                JOptionPane.showMessageDialog(listFrame, "Run graph analysis first (Show Skeleton or Load Voronoi).");
+                return;
+            }
+            JFileChooser fc = chooser("Save Vertex Count Histogram CSV");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try {
+                linbactsim.analysis.VertexCount vc = new linbactsim.analysis.VertexCount();
+                vc.compute(maze, ragRef[0], false);
+                vc.exportCsv(fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "Vertex count histogram exported.");
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error: " + ex.getMessage()); }
+        });
+
+        JButton exportSuccessfulVertexCountButton = new JButton("Export Successful Vertex Count");
+        exportSuccessfulVertexCountButton.addActionListener(ev -> {
+            if (ragRef[0] == null || !ragRef[0].isReady()) {
+                JOptionPane.showMessageDialog(listFrame, "Run graph analysis first (Show Skeleton or Load Voronoi).");
+                return;
+            }
+            JFileChooser fc = chooser("Save Successful Vertex Count Histogram CSV");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try {
+                linbactsim.analysis.VertexCount vc = new linbactsim.analysis.VertexCount();
+                vc.compute(maze, ragRef[0], true);
+                vc.exportCsv(fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "Successful vertex count histogram exported.");
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error: " + ex.getMessage()); }
+        });
+
+        JButton runBulkAnalysisButton = new JButton("Run Bulk Analysis...");
+        runBulkAnalysisButton.addActionListener(ev -> {
+            if (ragRef[0] == null || !ragRef[0].isReady()) {
+                JOptionPane.showMessageDialog(listFrame, "Run graph analysis first (Show Skeleton or Load Voronoi).");
+                return;
+            }
+            if (maze.getBacteriaCount() == 0) {
+                JOptionPane.showMessageDialog(listFrame, "Create bacteria first.");
+                return;
+            }
+            JFileChooser expFc = chooser("Select Experimental Vertex Count CSV");
+            if (expFc.showOpenDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            File expFile = expFc.getSelectedFile();
+
+            JFileChooser outFc = chooser("Save Bulk Analysis Results CSV");
+            if (outFc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            File outFile = outFc.getSelectedFile();
+
+            JDialog progress = new JDialog(listFrame, "Running Bulk Analysis", false);
+            JLabel progressLabel = new JLabel("Starting...", SwingConstants.CENTER);
+            progressLabel.setBorder(BorderFactory.createEmptyBorder(20, 30, 20, 30));
+            progress.add(progressLabel);
+            progress.pack();
+            progress.setLocationRelativeTo(listFrame);
+            progress.setVisible(true);
+
+            SimulationParameters bulkParams = collectParams();
+            SwingWorker<java.util.List<linbactsim.analysis.BulkSimulation.ComboResult>, Integer> worker =
+                new SwingWorker<>() {
+                    java.util.Map<Integer, Integer> expHistogram;
+                    @Override
+                    protected java.util.List<linbactsim.analysis.BulkSimulation.ComboResult> doInBackground() throws Exception {
+                        expHistogram = linbactsim.analysis.HistogramSimilarity.loadFromCsv(expFile);
+                        return linbactsim.analysis.BulkSimulation.run(
+                                maze, ragRef[0], runner, bulkParams, expHistogram,
+                                i -> publish(i));
+                    }
+                    @Override protected void process(java.util.List<Integer> chunks) {
+                        int latest = chunks.get(chunks.size() - 1);
+                        progressLabel.setText("Running combo " + (latest + 1) + " / 75...");
+                    }
+                    @Override protected void done() {
+                        progress.dispose();
+                        try {
+                            java.util.List<linbactsim.analysis.BulkSimulation.ComboResult> results = get();
+                            linbactsim.analysis.BulkSimulation.exportCsv(results, outFile);
+                            linbactsim.gui.BulkResultsFrame.show(results, expHistogram);
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(listFrame, "Error: " + ex.getMessage());
+                        }
+                    }
+                };
+            worker.execute();
+        });
+
+        JPanel bottomPanel = new JPanel(new FlowLayout());
+        bottomPanel.add(downloadButton);
+        bottomPanel.add(downloadSummaryButton);
+        bottomPanel.add(averageTrajectoryButton);
+        bottomPanel.add(exportVisitMatrixButton);
+        bottomPanel.add(exportSuccessfulVisitMatrixButton);
+        bottomPanel.add(exportVertexCountButton);
+        bottomPanel.add(exportSuccessfulVertexCountButton);
+        bottomPanel.add(runBulkAnalysisButton);
 
         listFrame.setLayout(new BorderLayout());
         listFrame.add(new JScrollPane(table), BorderLayout.CENTER);
-        listFrame.add(exportPanel, BorderLayout.SOUTH);
-        listFrame.setSize(750, 360);
-        listFrame.setLocationRelativeTo(frame);
+        listFrame.add(bottomPanel, BorderLayout.SOUTH);
+        listFrame.setSize(1200, 400);
         listFrame.setVisible(true);
     }
 
@@ -592,10 +729,10 @@ public class ButtonAction {
         p.setDuration(SimulationParameters.parseIntOrDefault(durationField.getText(), 1000));
         p.setVelocity(SimulationParameters.parseOrDefault(velocityField.getText(), 8));
         p.setStdDev(SimulationParameters.parseOrDefault(stdDevField.getText(), 3));
-        p.setAngleNoise(SimulationParameters.parseOrDefault(noiseField.getText(), 0.5));
-        p.setWMemory(SimulationParameters.parseOrDefault(wMemoryField.getText(), 0.70));
-        p.setWNoise(SimulationParameters.parseOrDefault(wNoiseField.getText(), 0.10));
-        p.setWWall(SimulationParameters.parseOrDefault(wWallField.getText(), 0.20));
+        p.setAngleNoise(SimulationParameters.parseOrDefault(noiseField.getText(), 0.6));
+        p.setWMemory(SimulationParameters.parseOrDefault(wMemoryField.getText(), 0.50));
+        p.setWNoise(SimulationParameters.parseOrDefault(wNoiseField.getText(), 0.20));
+        p.setWWall(SimulationParameters.parseOrDefault(wWallField.getText(), 0.30));
         return p;
     }
 

@@ -31,29 +31,17 @@ public class Analysis {
     }
 
     // Source: SURE.Main downloadButton ActionListener (~lines 758–798)
-    // Exports full [row, col] trajectory for every bacterium (two columns each).
+    // Exports full [row, col] trajectory for every bacterium (one column per bacterium,
+    // cells as "[row, col]" strings — matches original export format).
     public static void exportTrajectories(Maze maze, File file) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("Trajectories");
-            // Header row: B1_row, B1_col, B2_row, B2_col, ...
-            Row header = sheet.createRow(0);
             for (int i = 0; i < maze.getBacteriaCount(); i++) {
-                header.createCell(i * 2).setCellValue("B" + (i + 1) + "_row");
-                header.createCell(i * 2 + 1).setCellValue("B" + (i + 1) + "_col");
-            }
-            // Determine max trajectory length
-            int maxLen = 0;
-            for (int i = 0; i < maze.getBacteriaCount(); i++)
-                maxLen = Math.max(maxLen, maze.getBacterium(i).getTrajectory().size());
-            // Data rows
-            for (int step = 0; step < maxLen; step++) {
-                Row row = sheet.createRow(step + 1);
-                for (int i = 0; i < maze.getBacteriaCount(); i++) {
-                    List<int[]> traj = maze.getBacterium(i).getTrajectory();
-                    if (step < traj.size()) {
-                        row.createCell(i * 2).setCellValue(traj.get(step)[0]);
-                        row.createCell(i * 2 + 1).setCellValue(traj.get(step)[1]);
-                    }
+                List<int[]> trajectory = maze.getBacterium(i).getTrajectory();
+                for (int j = 0; j < trajectory.size(); j++) {
+                    Row row = sheet.getRow(j) != null ? sheet.getRow(j) : sheet.createRow(j);
+                    int[] pos = trajectory.get(j);
+                    row.createCell(i).setCellValue("[" + pos[0] + ", " + pos[1] + "]");
                 }
             }
             writeWorkbook(wb, file);
@@ -61,22 +49,19 @@ public class Analysis {
     }
 
     // Source: SURE.Main downloadSummaryButton ActionListener (~lines 804–840)
-    // Exports bacteria_index, step_count, trajectory_length per bacterium.
     public static void exportStepSummary(Maze maze, File file) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {
-            Sheet sheet = wb.createSheet("Step Summary");
+            Sheet sheet = wb.createSheet("Bacteria Summary");
             Row header = sheet.createRow(0);
-            header.createCell(0).setCellValue("bacteria_index");
-            header.createCell(1).setCellValue("step_count");
-            header.createCell(2).setCellValue("trajectory_length");
-            header.createCell(3).setCellValue("exited");
+            header.createCell(0).setCellValue("Bacteria Index");
+            header.createCell(1).setCellValue("Step Number");
+            header.createCell(2).setCellValue("Trajectory Length");
             for (int i = 0; i < maze.getBacteriaCount(); i++) {
                 Bacterium b = maze.getBacterium(i);
                 Row row = sheet.createRow(i + 1);
                 row.createCell(0).setCellValue(i + 1);
                 row.createCell(1).setCellValue(b.getTime());
-                row.createCell(2).setCellValue(b.getTrajectoryLength());
-                row.createCell(3).setCellValue(b.hasExited() ? 1 : 0);
+                row.createCell(2).setCellValue(b.getTrajectory().size());
             }
             writeWorkbook(wb, file);
         }
@@ -95,49 +80,43 @@ public class Analysis {
     }
 
     // -------------------------------------------------------------------------
-    // Shared visit-matrix writer
+    // Shared visit-matrix writer — CSV output (matches original export format)
     // -------------------------------------------------------------------------
     private static void writeVisitMatrix(Maze maze, RAG rag, File file, boolean exitedOnly)
             throws IOException {
-        // Collect all junction IDs present in adjacency map (positive IDs only)
-        List<Integer> vertexList = new ArrayList<>();
-        if (rag != null && rag.getAdjacency() != null)
-            vertexList.addAll(rag.getAdjacency().keySet());
-        Collections.sort(vertexList);
+        int n = maze.getBacteriaCount();
 
-        // Collect region trajectories for each bacterium
         List<List<Integer>> allTrajectories = new ArrayList<>();
-        for (int i = 0; i < maze.getBacteriaCount(); i++) {
+        List<Integer> exitedIndices = new ArrayList<>();
+        TreeSet<Integer> allVertices = new TreeSet<>();
+
+        for (int i = 0; i < n; i++) {
             Bacterium b = maze.getBacterium(i);
-            if (exitedOnly && !b.hasExited()) {
-                allTrajectories.add(null);
-            } else {
-                allTrajectories.add(rag != null ? rag.computeRegionTrajectory(b, maze) : List.of());
+            if (exitedOnly && !b.hasExited()) continue;
+            exitedIndices.add(i);
+            List<Integer> traj = rag != null ? rag.computeRegionTrajectory(b, maze) : List.of();
+            List<Integer> junctionTraj = new ArrayList<>();
+            for (int id : traj) {
+                if (id > 0) { junctionTraj.add(id); allVertices.add(id); }
             }
+            allTrajectories.add(junctionTraj);
         }
 
-        try (Workbook wb = new XSSFWorkbook()) {
-            Sheet sheet = wb.createSheet(exitedOnly ? "Successful Visit Matrix" : "Visit Matrix");
-            // Header
-            Row header = sheet.createRow(0);
-            header.createCell(0).setCellValue("bacteria_index");
-            for (int j = 0; j < vertexList.size(); j++)
-                header.createCell(j + 1).setCellValue("v" + vertexList.get(j));
+        List<Integer> vertexList = new ArrayList<>(allVertices);
+        File out = file.getName().toLowerCase().endsWith(".csv")
+                ? file : new File(file.getAbsolutePath() + ".csv");
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(out)) {
+            StringBuilder header = new StringBuilder("bacteria_index");
+            for (int vId : vertexList) header.append(",v").append(vId);
+            pw.println(header);
 
-            int rowIdx = 1;
-            for (int i = 0; i < maze.getBacteriaCount(); i++) {
-                List<Integer> traj = allTrajectories.get(i);
-                if (traj == null) continue;
-                // Count junction visits
+            for (int i = 0; i < exitedIndices.size(); i++) {
                 Map<Integer, Integer> counts = new HashMap<>();
-                for (int id : traj)
-                    if (id > 0) counts.merge(id, 1, Integer::sum);
-                Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(i + 1);
-                for (int j = 0; j < vertexList.size(); j++)
-                    row.createCell(j + 1).setCellValue(counts.getOrDefault(vertexList.get(j), 0));
+                for (int vId : allTrajectories.get(i)) counts.merge(vId, 1, Integer::sum);
+                StringBuilder row = new StringBuilder(String.valueOf(exitedIndices.get(i) + 1));
+                for (int vId : vertexList) row.append(",").append(counts.getOrDefault(vId, 0));
+                pw.println(row);
             }
-            writeWorkbook(wb, file);
         }
     }
 
