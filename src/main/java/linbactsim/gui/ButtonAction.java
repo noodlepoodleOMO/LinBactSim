@@ -635,7 +635,9 @@ public class ButtonAction {
                 JOptionPane.showMessageDialog(listFrame, "Create bacteria first.");
                 return;
             }
-            JFileChooser expFc = chooser("Select Experimental Vertex Count CSV");
+            JFileChooser expFc = chooser("Select Experimental Vertex Count (CSV or XLSX)");
+            expFc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                    "Histogram files (*.csv, *.xlsx, *.xls)", "csv", "xlsx", "xls"));
             if (expFc.showOpenDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
             File expFile = expFc.getSelectedFile();
 
@@ -657,14 +659,15 @@ public class ButtonAction {
                     java.util.Map<Integer, Integer> expHistogram;
                     @Override
                     protected java.util.List<linbactsim.analysis.BulkSimulation.ComboResult> doInBackground() throws Exception {
-                        expHistogram = linbactsim.analysis.HistogramSimilarity.loadFromCsv(expFile);
+                        expHistogram = linbactsim.analysis.HistogramSimilarity.loadFromFile(expFile);
                         return linbactsim.analysis.BulkSimulation.run(
                                 maze, ragRef[0], runner, bulkParams, expHistogram,
                                 i -> publish(i));
                     }
                     @Override protected void process(java.util.List<Integer> chunks) {
                         int latest = chunks.get(chunks.size() - 1);
-                        progressLabel.setText("Running combo " + (latest + 1) + " / 75...");
+                        progressLabel.setText("Running combo " + (latest + 1) + " / "
+                                + linbactsim.analysis.BulkSimulation.totalCombos() + "...");
                     }
                     @Override protected void done() {
                         progress.dispose();
