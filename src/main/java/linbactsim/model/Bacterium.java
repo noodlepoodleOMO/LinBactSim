@@ -41,6 +41,12 @@ public class Bacterium {
     // Source: SURE.Bacterium#wMemory, wNoise, wWall
     private double wMemory, wNoise, wWall;
 
+    // Corner-dwelling collision parameters — how close to perpendicular a wall
+    // hit must be to count as "head-on", and how much to shrink the remaining
+    // slide distance when it does. See CornerDwelling.headOnFactor().
+    private double dwellThresholdRad = Math.toRadians(20);
+    private double dwellFactor       = 0.3;
+
     // ---- Per-step vector debug info (written by WeibullModel/ForceModel each step) ----
     private String   lastModelType;
     private double[] lastRawDistances = new double[4]; // [up,down,right,left] distances
@@ -133,6 +139,17 @@ public class Bacterium {
     public double getWMemory() { return wMemory; }
     public double getWNoise()  { return wNoise; }
     public double getWWall()   { return wWall; }
+
+    // Source: mirrors setDirectionWeights() — simulation-wide corner-dwelling
+    // parameters, applied per-bacterium so movement models can read them
+    // without needing a SimulationParameters reference.
+    public void setCornerDwellParams(double thresholdDeg, double factor) {
+        this.dwellThresholdRad = Math.toRadians(thresholdDeg);
+        this.dwellFactor       = factor;
+    }
+
+    public double getDwellThresholdRad() { return dwellThresholdRad; }
+    public double getDwellFactor()       { return dwellFactor; }
 
     // -------------------------------------------------------------------------
     // Position

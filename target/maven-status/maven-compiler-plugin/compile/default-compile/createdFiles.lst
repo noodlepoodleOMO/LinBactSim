@@ -47,5 +47,6 @@ linbactsim/io/BulkSim.class
 linbactsim/gui/RAGPanel.class
 linbactsim/resources/MazeMaps.class
 linbactsim/gui/BulkResultsFrame$1.class
+linbactsim/simulation/CornerDwelling.class
 linbactsim/gui/MazePanel$2.class
 linbactsim/model/Pixel.class

@@ -14,6 +14,10 @@ public class Maze {
     private List<Bacterium> bacteria;
     private int boundaryThickness = 2;
 
+    // Wall tangent-line orientation (radians, mod PI), keyed by pixel; null
+    // entries/array mean no data loaded. Source: MATLAB wallTangentAngles.m export.
+    private double[][] wallTangentRad;
+
     // Source: SURE.Maze(int, int, int)
     public Maze(int rows, int cols, int displayPixelSize) {
         this.displayPixelSize = displayPixelSize;
@@ -53,6 +57,18 @@ public class Maze {
 
     public int getBoundaryThickness()                    { return boundaryThickness; }
     public void setBoundaryThickness(int thickness)      { this.boundaryThickness = thickness; }
+
+    // -------------------------------------------------------------------------
+    // Wall tangent orientation (for corner-dwelling collision handling)
+    // -------------------------------------------------------------------------
+
+    public void setWallTangent(double[][] tangentRad) { this.wallTangentRad = tangentRad; }
+
+    // Returns NaN when no data was loaded or the pixel has no recorded tangent.
+    public double getWallTangentRad(int row, int col) {
+        if (wallTangentRad == null || !isValid(row, col)) return Double.NaN;
+        return wallTangentRad[row][col];
+    }
 
     // -------------------------------------------------------------------------
     // Bacterium list

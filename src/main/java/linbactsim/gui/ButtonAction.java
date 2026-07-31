@@ -39,8 +39,9 @@ public class ButtonAction {
     private JFrame       frame;
 
     // ---- File-chooser memory -------------------------------------------------
-    private File lastCsvDir     = null;
-    private File lastVoronoiDir = null;
+    private File lastCsvDir        = null;
+    private File lastVoronoiDir    = null;
+    private File lastWallAngleDir  = null;
 
     // ---- Voronoi import state ------------------------------------------------
     private int[][] importedVoronoiGrid = null;
@@ -54,6 +55,8 @@ public class ButtonAction {
     private final JTextField wMemoryField  = new JTextField("0.50",6);
     private final JTextField wNoiseField   = new JTextField("0.20",6);
     private final JTextField wWallField    = new JTextField("0.30",6);
+    private final JTextField dwellThresholdField = new JTextField("20", 6);
+    private final JTextField dwellFactorField    = new JTextField("0.3",6);
     private final JTextField rowField      = new JTextField("-1",  5);
     private final JTextField colField      = new JTextField("-1",  5);
     private final JTextField countField    = new JTextField("1",   5);
@@ -130,7 +133,12 @@ public class ButtonAction {
         f.setLayout(new BorderLayout(4, 4));
         f.add(buildToolbar(),         BorderLayout.NORTH);
         f.add(new JScrollPane(panel), BorderLayout.CENTER);
-        f.add(buildInputPanel(),      BorderLayout.EAST);
+
+        JScrollPane inputScroll = new JScrollPane(buildInputPanel());
+        inputScroll.setBorder(BorderFactory.createEmptyBorder());
+        inputScroll.setPreferredSize(new Dimension(270, 700));
+        inputScroll.getVerticalScrollBar().setUnitIncrement(16);
+        f.add(inputScroll, BorderLayout.EAST);
         return f;
     }
 
@@ -217,6 +225,13 @@ public class ButtonAction {
         for (JComponent c : new JComponent[]{skelBtn, vorBtn, degBtn, ragBtn, saveVorBtn, loadVorBtn, resetVorBtn, remedyBtn, deleteJBtn})
             analysisBar.add(c);
 
+        // ---- Wall angles bar --------------------------------------------------
+        JPanel wallAngleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        wallAngleBar.setBorder(BorderFactory.createTitledBorder("Wall Angles"));
+        JButton wallAngleBtn = new JButton("Load CSV…");
+        wallAngleBtn.addActionListener(e -> loadWallAnglesCSV());
+        wallAngleBar.add(wallAngleBtn);
+
         // ---- Assemble rows ---------------------------------------------------
         JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         row1.add(mazeBar);
@@ -225,6 +240,7 @@ public class ButtonAction {
 
         JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         row2.add(analysisBar);
+        row2.add(wallAngleBar);
 
         JPanel toolbar = new JPanel();
         toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.Y_AXIS));
@@ -236,7 +252,6 @@ public class ButtonAction {
     private JPanel buildInputPanel() {
         JPanel outer = new JPanel();
         outer.setLayout(new BoxLayout(outer, BoxLayout.Y_AXIS));
-        outer.setPreferredSize(new Dimension(255, 700));
         outer.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
         // --- Species & Model --------------------------------------------------
@@ -259,6 +274,8 @@ public class ButtonAction {
         addRow(pp, g2, 3, "w Memory:", wMemoryField);
         addRow(pp, g2, 4, "w Noise:",  wNoiseField);
         addRow(pp, g2, 5, "w Wall:",   wWallField);
+        addRow(pp, g2, 6, "Dwell Thresh (°):", dwellThresholdField);
+        addRow(pp, g2, 7, "Dwell Factor:",     dwellFactorField);
         outer.add(pp);
 
         // --- Bacteria placement -----------------------------------------------
@@ -300,6 +317,7 @@ public class ButtonAction {
             rp.add(b);
         outer.add(rp);
         outer.add(Box.createVerticalGlue());
+        outer.setPreferredSize(new Dimension(255, outer.getPreferredSize().height));
         return outer;
     }
 
@@ -341,6 +359,23 @@ public class ButtonAction {
             swapMaze(m);
         } catch (Exception ex) {
             error("Error loading CSV: " + ex.getMessage());
+        }
+    }
+
+    // Loads a dense wall-tangent-angle CSV (from the MATLAB
+    // wallTangentAngles.m / exportWallTangentCSV.m pipeline) onto the
+    // current maze. Must match the current maze's exact dimensions, so
+    // load it after the maze it describes.
+    private void loadWallAnglesCSV() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Load Wall Tangent Angles CSV");
+        if (lastWallAngleDir != null) fc.setCurrentDirectory(lastWallAngleDir);
+        if (fc.showOpenDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+        lastWallAngleDir = fc.getSelectedFile().getParentFile();
+        try {
+            MazeIO.loadWallTangentCSV(fc.getSelectedFile(), mazeRef[0]);
+        } catch (Exception ex) {
+            error("Error loading wall angles: " + ex.getMessage());
         }
     }
 
@@ -452,6 +487,7 @@ public class ButtonAction {
                     ? new Bacterium(len, wid, reqRow, reqCol, params.getAngleNoise(), species)
                     : new Bacterium(len, wid, maze, params.getAngleNoise(), species);
             b.setDirectionWeights(params.getWMemory(), params.getWNoise(), params.getWWall());
+            b.setCornerDwellParams(params.getDwellThresholdDeg(), params.getDwellFactor());
             maze.addBacterium(b);
         }
         panel.repaint();
@@ -743,6 +779,8 @@ public class ButtonAction {
         p.setWMemory(SimulationParameters.parseOrDefault(wMemoryField.getText(), 0.50));
         p.setWNoise(SimulationParameters.parseOrDefault(wNoiseField.getText(), 0.20));
         p.setWWall(SimulationParameters.parseOrDefault(wWallField.getText(), 0.30));
+        p.setDwellThresholdDeg(SimulationParameters.parseOrDefault(dwellThresholdField.getText(), 20));
+        p.setDwellFactor(SimulationParameters.parseOrDefault(dwellFactorField.getText(), 0.3));
         return p;
     }
 

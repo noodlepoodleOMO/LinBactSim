@@ -28,6 +28,7 @@
 /Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/BacteriaTracking.java
 /Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/ChemotaxisModel.java
 /Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/CoordinateSystem.java
+/Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/CornerDwelling.java
 /Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/ForceModel.java
 /Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/ForceModel4Ray.java
 /Users/ruolinhu/Documents/Biocomputation/!not-org-biocomp/LinBactSim/src/main/java/linbactsim/simulation/ForceModel4RayCutoff.java

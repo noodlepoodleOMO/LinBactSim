@@ -283,6 +283,13 @@ public class ForceModel4Ray implements MovementModel {
 
         double usedDist = Math.sqrt((lastFreeRow-row)*(lastFreeRow-row) + (lastFreeCol-col)*(lastFreeCol-col));
         double remaining = totalDist - usedDist;
+
+        double wallTangent = maze.getWallTangentRad(collisionPixel.getRow(), collisionPixel.getCol());
+        if (!Double.isNaN(wallTangent)) {
+            remaining *= CornerDwelling.headOnFactor(originalDir, wallTangent,
+                    bacterium.getDwellThresholdRad(), bacterium.getDwellFactor());
+        }
+
         if (remaining < 0.5) return null;
 
         int slideEndRow = lastFreeRow, slideEndCol = lastFreeCol;
@@ -396,6 +403,13 @@ public class ForceModel4Ray implements MovementModel {
 
         double usedDist = Math.sqrt((lastFreeRow-row)*(lastFreeRow-row) + (lastFreeCol-col)*(lastFreeCol-col));
         double remaining = totalDist - usedDist;
+
+        double wallTangent = maze.getWallTangentRad(collisionPixel.getRow(), collisionPixel.getCol());
+        if (!Double.isNaN(wallTangent)) {
+            remaining *= CornerDwelling.headOnFactor(originalDir, wallTangent,
+                    bacterium.getDwellThresholdRad(), bacterium.getDwellFactor());
+        }
+
         if (remaining < 0.5) { bacterium.addTime(dt); return; }
 
         int maxSlides = 5;

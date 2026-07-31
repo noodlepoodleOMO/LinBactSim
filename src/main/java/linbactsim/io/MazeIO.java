@@ -131,6 +131,42 @@ public class MazeIO {
         for (int[] pos : wallList) maze.setWall(pos[0], pos[1]);
     }
 
+    // Loads a dense angle-degrees CSV -- one line per maze row, one
+    // comma-separated value per column, "NaN" for non-wall pixels -- as
+    // produced by the MATLAB wallTangentAngles.m / exportWallTangentCSV.m
+    // pipeline, and attaches it to the maze for corner-dwelling collision
+    // handling. Must match the maze's exact row/col dimensions.
+    public static void loadWallTangentCSV(File file, Maze maze) throws IOException {
+        List<double[]> rows = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                String[] tokens = line.split(",");
+                double[] row = new double[tokens.length];
+                for (int i = 0; i < tokens.length; i++) {
+                    String t = tokens[i].trim();
+                    row[i] = t.equalsIgnoreCase("nan") ? Double.NaN : Double.parseDouble(t);
+                }
+                rows.add(row);
+            }
+        }
+
+        int numRows = rows.size();
+        int numCols = numRows > 0 ? rows.get(0).length : 0;
+        if (numRows != maze.getNumRows() || numCols != maze.getNumCols())
+            throw new IOException("Wall angle CSV is " + numRows + "x" + numCols
+                    + " but maze is " + maze.getNumRows() + "x" + maze.getNumCols());
+
+        double[][] tangentRad = new double[numRows][numCols];
+        for (int r = 0; r < numRows; r++)
+            for (int c = 0; c < numCols; c++) {
+                double angleDeg = rows.get(r)[c];
+                tangentRad[r][c] = Double.isNaN(angleDeg) ? Double.NaN : Math.toRadians(angleDeg);
+            }
+        maze.setWallTangent(tangentRad);
+    }
+
     private static InputStream tryOpen(String path) {
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
         return (cl != null) ? cl.getResourceAsStream(path) : null;

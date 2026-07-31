@@ -10,7 +10,18 @@
       "Bash(xargs cat)",
       "Bash(javac -cp src/main/java src/main/java/linbactsim/simulation/ForceModel4RayCutoff.java)",
       "Bash(find /usr /opt /home -name \"mvn\" 2>/dev/null | head -5; which java 2>/dev/null; ls /workspace/)",
-      "Read(//home/**)"
+      "Read(//home/**)",
+      "Bash(xargs ls -la)",
+      "Bash(git -C /workspace log --oneline -15)",
+      "Bash(mvn -q -o compile)",
+      "Bash(find / -maxdepth 3 -iname \"*maven*\")",
+      "Bash(java -version)",
+      "Bash(command -v grep)",
+      "Bash(command -v awk)",
+      "Bash(command -v python3)",
+      "Bash(command -v node)",
+      "Bash(python3 -c ' *)",
+      "Bash(find / -maxdepth 4 -iname \"*jdk*\" -o -iname \"*jre*\")"
     ]
   }
 }

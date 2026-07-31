@@ -19,6 +19,10 @@ public class SimulationParameters {
     private double wNoise  = 0.10;
     private double wWall   = 0.20;
 
+    // Corner-dwelling collision parameters — see CornerDwelling.headOnFactor().
+    private double dwellThresholdDeg = 20;
+    private double dwellFactor       = 0.3;
+
     public SimulationParameters() {}
 
     // Source: SURE.Main#parseIntOrDefault(String, int)
@@ -58,6 +62,8 @@ public class SimulationParameters {
     public double getWMemory()     { return wMemory; }
     public double getWNoise()      { return wNoise; }
     public double getWWall()       { return wWall; }
+    public double getDwellThresholdDeg() { return dwellThresholdDeg; }
+    public double getDwellFactor()       { return dwellFactor; }
 
     public void setDuration(int duration)        { this.duration = duration; }
     public void setDt(int dt)                    { this.dt = dt; }
@@ -68,4 +74,6 @@ public class SimulationParameters {
     public void setWMemory(double wMemory)       { this.wMemory = wMemory; }
     public void setWNoise(double wNoise)         { this.wNoise = wNoise; }
     public void setWWall(double wWall)           { this.wWall = wWall; }
+    public void setDwellThresholdDeg(double d)   { this.dwellThresholdDeg = d; }
+    public void setDwellFactor(double f)         { this.dwellFactor = f; }
 }
