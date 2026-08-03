@@ -21,7 +21,14 @@
       "Bash(command -v python3)",
       "Bash(command -v node)",
       "Bash(python3 -c ' *)",
-      "Bash(find / -maxdepth 4 -iname \"*jdk*\" -o -iname \"*jre*\")"
+      "Bash(find / -maxdepth 4 -iname \"*jdk*\" -o -iname \"*jre*\")",
+      "Bash(mvn -version)",
+      "Bash(apt-cache search *)",
+      "Bash(sudo apt-get update)",
+      "Bash(sudo apt-get install -y openjdk-17-jdk maven)",
+      "Bash(sudo -n true)",
+      "Bash(sudo -l)",
+      "Read(//etc/sudoers.d/**)"
     ]
   }
 }

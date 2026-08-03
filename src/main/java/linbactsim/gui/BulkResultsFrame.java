@@ -46,7 +46,8 @@ public class BulkResultsFrame extends JFrame {
 
     private void buildUI() {
         // --- Table ---
-        String[] cols = {"Rank", "wM_norm", "wN_norm", "wW_norm", "Angle", "Score"};
+        String[] cols = {"Rank", "wM_norm", "wN_norm", "wW_norm", "Angle",
+                         "DwellThreshDeg", "DwellFactor", "Score"};
         DefaultTableModel model = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -58,6 +59,8 @@ public class BulkResultsFrame extends JFrame {
                     String.format("%.3f", r.wNoiseNorm()),
                     String.format("%.3f", r.wWallNorm()),
                     String.format("%.2f", r.noiseAngle()),
+                    String.format("%.1f", r.dwellThresholdDeg()),
+                    String.format("%.2f", r.dwellFactor()),
                     String.format("%.4f", r.score())
             });
         }
@@ -132,9 +135,9 @@ public class BulkResultsFrame extends JFrame {
         double emd = 1.0 / r.score() - 1.0;
         detailLabel.setText(String.format(
                 "Rank %d  |  wMemory=%.3f  wNoise=%.3f  wWall=%.3f  angle=%.2f rad  " +
-                "|  score=%.4f  (EMD=%.4f)",
+                "|  dwellThresh=%.1f°  dwellFactor=%.2f  |  score=%.4f  (EMD=%.4f)",
                 rank, r.wMemoryNorm(), r.wNoiseNorm(), r.wWallNorm(), r.noiseAngle(),
-                r.score(), emd));
+                r.dwellThresholdDeg(), r.dwellFactor(), r.score(), emd));
 
         chart.setTitle(String.format("Rank %d — Score %.4f", rank, r.score()));
         chart.fireChartChanged();

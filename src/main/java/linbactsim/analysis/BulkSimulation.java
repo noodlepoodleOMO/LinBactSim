@@ -44,7 +44,9 @@ import java.util.function.Consumer;
  *    4:2.5:1    → 6 perms  (step ×1.6  / ×2.5)
  *
  *  Total weight combos: 1+3+3+3 + 3+3 + 6×7 = 58
- *  × 3 noise angles {0.6, 1.6, π} = 174 runs
+ *  × 3 noise angles {0.6, 1.6, π}
+ *  × 4 dwell thresholds {0, 10, 20, 30}°
+ *  × 5 dwell factors {0.1, 0.3, 0.5, 0.7, 1.0} = 3480 runs
  */
 public class BulkSimulation {
 
@@ -72,13 +74,24 @@ public class BulkSimulation {
 
     public static final double[] ANGLE_LEVELS = {0.6, 1.6, Math.PI};
 
+    // Corner-dwelling params swept the same way as ANGLE_LEVELS — see Bacterium.setCornerDwellParams().
+    // factor=1.0 is a true physics no-op (headOnFactor always returns 1.0 either way), included
+    // as a baseline control alongside the swept values.
+    public static final double[] DWELL_THRESHOLD_LEVELS = {0, 10, 20, 30};
+    public static final double[] DWELL_FACTOR_LEVELS = {0.1, 0.3, 0.5, 0.7, 1.0};
+
     // -------------------------------------------------------------------------
 
     private record BacteriumInit(int row, int col, BacteriumSpecies species,
                                  int length, int width) {}
+    
+    // record: immutable data carrier type declaration
+    // private final fields, accessor methods named after the field e.g. .row() .col()
+    // equals, hascode, toString
 
     public record ComboResult(
             double wMemoryRaw, double wNoiseRaw, double wWallRaw, double noiseAngle,
+            double dwellThresholdDeg, double dwellFactor,
             double wMemoryNorm, double wNoiseNorm, double wWallNorm,
             Map<Integer, Integer> histogram,
             double score
@@ -90,12 +103,15 @@ public class BulkSimulation {
     public static int totalCombos() {
         int count = 0;
         for (double[] rs : RATIO_SETS) count += uniquePermutations(rs).size();
-        return count * ANGLE_LEVELS.length;
+        return count * ANGLE_LEVELS.length * DWELL_THRESHOLD_LEVELS.length * DWELL_FACTOR_LEVELS.length;
     }
 
     /**
      * Runs all combos. progressCallback receives the 0-based combo index after each run.
      * Returns results sorted by score descending (best first).
+     * 
+     * 
+     * 
      */
     public static List<ComboResult> run(
             Maze maze,
@@ -104,7 +120,7 @@ public class BulkSimulation {
             SimulationParameters baseParams,
             Map<Integer, Integer> expHistogram,
             Consumer<Integer> progressCallback
-    ) throws IOException {
+    ) {
 
         List<BacteriumInit> initList = snapshotBacteria(maze);
         if (initList.isEmpty()) throw new IllegalStateException("No bacteria in maze.");
@@ -117,33 +133,38 @@ public class BulkSimulation {
                 double wM = perm[0], wN = perm[1], wW = perm[2];
 
                 for (double angle : ANGLE_LEVELS) {
-                    maze.clearBacteria();
-                    maze.clearDensity();
+                    for (double dwellThresholdDeg : DWELL_THRESHOLD_LEVELS) {
+                        for (double dwellFactor : DWELL_FACTOR_LEVELS) {
+                            maze.clearBacteria();
+                            maze.clearDensity();
 
-                    for (BacteriumInit init : initList) {
-                        Bacterium b = new Bacterium(
-                                init.length(), init.width(),
-                                init.row(), init.col(),
-                                angle, init.species());
-                        b.setDirectionWeights(wM, wN, wW);
-                        maze.addBacterium(b);
+                            for (BacteriumInit init : initList) {
+                                Bacterium b = new Bacterium(
+                                        init.length(), init.width(),
+                                        init.row(), init.col(),
+                                        angle, init.species());
+                                b.setDirectionWeights(wM, wN, wW);
+                                b.setCornerDwellParams(dwellThresholdDeg, dwellFactor);
+                                maze.addBacterium(b);
+                            }
+
+                            runner.runFast(maze, baseParams);
+
+                            VertexCount vc = new VertexCount();
+                            vc.compute(maze, rag, true); // exited bacteria only
+                            Map<Integer, Integer> histogram = new HashMap<>(vc.getHistogram());
+
+                            double sum = wM + wN + wW;
+                            double score = HistogramSimilarity.similarityScore(histogram, expHistogram);
+
+                            results.add(new ComboResult(
+                                    wM, wN, wW, angle, dwellThresholdDeg, dwellFactor,
+                                    wM / sum, wN / sum, wW / sum,
+                                    histogram, score));
+
+                            progressCallback.accept(comboIndex++);
+                        }
                     }
-
-                    runner.runFast(maze, baseParams);
-
-                    VertexCount vc = new VertexCount();
-                    vc.compute(maze, rag, true); // exited bacteria only
-                    Map<Integer, Integer> histogram = new HashMap<>(vc.getHistogram());
-
-                    double sum = wM + wN + wW;
-                    double score = HistogramSimilarity.similarityScore(histogram, expHistogram);
-
-                    results.add(new ComboResult(
-                            wM, wN, wW, angle,
-                            wM / sum, wN / sum, wW / sum,
-                            histogram, score));
-
-                    progressCallback.accept(comboIndex++);
                 }
             }
         }
@@ -157,14 +178,15 @@ public class BulkSimulation {
         File out = file.getName().toLowerCase().endsWith(".csv")
                 ? file : new File(file.getAbsolutePath() + ".csv");
         try (PrintWriter pw = new PrintWriter(out)) {
-            pw.println("rank,wMemory_raw,wNoise_raw,wWall_raw,noiseAngle," +
+            pw.println("rank,wMemory_raw,wNoise_raw,wWall_raw,noiseAngle,dwellThresholdDeg,dwellFactor," +
                        "wMemory_norm,wNoise_norm,wWall_norm,emd_distance,similarity_score");
             for (int i = 0; i < results.size(); i++) {
                 ComboResult r = results.get(i);
                 double emd = 1.0 / r.score() - 1.0;
-                pw.printf("%d,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.6f,%.6f%n",
+                pw.printf("%d,%.2f,%.2f,%.2f,%.4f,%.2f,%.4f,%.4f,%.4f,%.4f,%.6f,%.6f%n",
                         i + 1,
                         r.wMemoryRaw(), r.wNoiseRaw(), r.wWallRaw(), r.noiseAngle(),
+                        r.dwellThresholdDeg(), r.dwellFactor(),
                         r.wMemoryNorm(), r.wNoiseNorm(), r.wWallNorm(),
                         emd, r.score());
             }
