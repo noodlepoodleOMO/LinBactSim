@@ -29,7 +29,9 @@
       "Bash(sudo -n true)",
       "Bash(sudo -l)",
       "Read(//etc/sudoers.d/**)",
-      "Bash(awk -F: '$1<660')"
+      "Bash(awk -F: '$1<660')",
+      "Bash(mvn -q compile)",
+      "Bash(git rm *)"
     ]
   }
 }
