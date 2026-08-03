@@ -2,6 +2,7 @@ package linbactsim.gui;
 
 import linbactsim.analysis.BulkSimulation.ComboResult;
 import linbactsim.analysis.HistogramSimilarity;
+import linbactsim.model.Maze;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
@@ -26,22 +27,25 @@ public class BulkResultsFrame extends JFrame {
 
     private final List<ComboResult> results;
     private final Map<Integer, Integer> expHistogram;
+    private final Maze maze;
     private final DefaultCategoryDataset dataset = new DefaultCategoryDataset();
     private JFreeChart chart;
     private JLabel detailLabel;
+    private DensitySnapshotPanel densityPanel;
 
-    private BulkResultsFrame(List<ComboResult> results, Map<Integer, Integer> expHistogram) {
+    private BulkResultsFrame(List<ComboResult> results, Map<Integer, Integer> expHistogram, Maze maze) {
         super("Bulk Analysis Results");
         this.results = results;
         this.expHistogram = expHistogram;
+        this.maze = maze;
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setSize(1000, 600);
+        setSize(1150, 620);
         setLocationRelativeTo(null);
         buildUI();
     }
 
-    public static void show(List<ComboResult> results, Map<Integer, Integer> expHistogram) {
-        SwingUtilities.invokeLater(() -> new BulkResultsFrame(results, expHistogram).setVisible(true));
+    public static void show(List<ComboResult> results, Map<Integer, Integer> expHistogram, Maze maze) {
+        SwingUtilities.invokeLater(() -> new BulkResultsFrame(results, expHistogram, maze).setVisible(true));
     }
 
     private void buildUI() {
@@ -85,7 +89,23 @@ public class BulkResultsFrame extends JFrame {
 
         styleChart();
         ChartPanel chartPanel = new ChartPanel(chart);
-        chartPanel.setPreferredSize(new Dimension(550, 450));
+        chartPanel.setPreferredSize(new Dimension(380, 380));
+
+        // --- Density heatmap (compact, decoupled from the live maze) ---
+        int mazeRows = maze.getNumRows(), mazeCols = maze.getNumCols();
+        boolean[][] walls = new boolean[mazeRows][mazeCols];
+        for (int r = 0; r < mazeRows; r++)
+            for (int c = 0; c < mazeCols; c++)
+                walls[r][c] = maze.isWall(r, c);
+        int cellSize = Math.max(2, Math.min(maze.getDisplayPixelSize(), 400 / Math.max(1, mazeCols)));
+        densityPanel = new DensitySnapshotPanel(walls, mazeRows, mazeCols, cellSize);
+
+        JPanel chartBox = titled(chartPanel, "Vertex Count Histogram");
+        JPanel densityBox = titled(densityPanel, "Density Map");
+
+        JPanel sideBySide = new JPanel(new GridLayout(1, 2, 10, 0));
+        sideBySide.add(chartBox);
+        sideBySide.add(densityBox);
 
         // --- Detail label ---
         detailLabel = new JLabel("Select a row to view histogram comparison.");
@@ -93,8 +113,8 @@ public class BulkResultsFrame extends JFrame {
 
         // --- Layout ---
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                new JScrollPane(table), chartPanel);
-        split.setDividerLocation(380);
+                new JScrollPane(table), new JScrollPane(sideBySide));
+        split.setDividerLocation(340);
 
         setLayout(new BorderLayout());
         add(split, BorderLayout.CENTER);
@@ -114,7 +134,15 @@ public class BulkResultsFrame extends JFrame {
         }
     }
 
+    private static JPanel titled(JComponent inner, String title) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBorder(BorderFactory.createTitledBorder(title));
+        p.add(inner, BorderLayout.CENTER);
+        return p;
+    }
+
     private void updateChart(ComboResult r, int rank) {
+        densityPanel.setCounts(r.density());
         dataset.clear();
 
         // Collect all x-axis keys from both histograms

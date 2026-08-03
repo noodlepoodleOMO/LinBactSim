@@ -94,7 +94,8 @@ public class BulkSimulation {
             double dwellThresholdDeg, double dwellFactor,
             double wMemoryNorm, double wNoiseNorm, double wWallNorm,
             Map<Integer, Integer> histogram,
-            double score
+            double score,
+            int[] density  // per-pixel visit counts, row-major, snapshotted right after this combo's run
     ) {}
 
     // -------------------------------------------------------------------------
@@ -160,7 +161,7 @@ public class BulkSimulation {
                             results.add(new ComboResult(
                                     wM, wN, wW, angle, dwellThresholdDeg, dwellFactor,
                                     wM / sum, wN / sum, wW / sum,
-                                    histogram, score));
+                                    histogram, score, snapshotDensity(maze)));
 
                             progressCallback.accept(comboIndex++);
                         }
@@ -196,6 +197,17 @@ public class BulkSimulation {
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
+
+    /** Flattens the maze's current per-pixel visit counts into a row-major snapshot. */
+    private static int[] snapshotDensity(Maze maze) {
+        int rows = maze.getNumRows(), cols = maze.getNumCols();
+        int[] density = new int[rows * cols];
+        int i = 0;
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                density[i++] = maze.getPixel(r, c).getCount();
+        return density;
+    }
 
     private static List<BacteriumInit> snapshotBacteria(Maze maze) {
         List<BacteriumInit> list = new ArrayList<>();

@@ -31,7 +31,8 @@
       "Read(//etc/sudoers.d/**)",
       "Bash(awk -F: '$1<660')",
       "Bash(mvn -q compile)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(awk 'NR==660,NR==695' /workspace/src/main/java/linbactsim/gui/ButtonAction.java)"
     ]
   }
 }

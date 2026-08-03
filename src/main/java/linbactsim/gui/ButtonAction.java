@@ -710,7 +710,7 @@ public class ButtonAction {
                         try {
                             java.util.List<linbactsim.analysis.BulkSimulation.ComboResult> results = get();
                             linbactsim.analysis.BulkSimulation.exportCsv(results, outFile);
-                            linbactsim.gui.BulkResultsFrame.show(results, expHistogram);
+                            linbactsim.gui.BulkResultsFrame.show(results, expHistogram, maze);
                         } catch (Exception ex) {
                             JOptionPane.showMessageDialog(listFrame, "Error: " + ex.getMessage());
                         }
