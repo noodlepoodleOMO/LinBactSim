@@ -210,23 +210,34 @@ public class RAG {
         return inferSkips(seq);
     }
 
-    // If bacterium jumps directly edge→edge, insert the shared junction.
+    // For each consecutive pair in seq, confirm the hop is a real adjacency-map edge
+    // (junction↔edge). If it isn't directly connected — including edge→edge and
+    // node→node hops, which are never direct — infer the missing hops via BFS
+    // shortest path and splice them in, approximating the true route taken.
     private List<Integer> inferSkips(List<Integer> seq) {
-        if (edgeEndpoints == null) return seq;
+        if (adjacency == null || edgeEndpoints == null) return seq;
         List<Integer> out = new ArrayList<>();
         for (int i = 0; i < seq.size(); i++) {
             int cur = seq.get(i);
             out.add(cur);
             if (i + 1 < seq.size()) {
                 int next = seq.get(i + 1);
-                if (cur < 0 && next < 0) {
-                    List<Integer> ep1 = edgeEndpoints.getOrDefault(cur, List.of());
-                    List<Integer> ep2 = edgeEndpoints.getOrDefault(next, List.of());
-                    for (int j : ep1) { if (ep2.contains(j)) { out.add(j); break; } }
+                if (!directlyConnected(cur, next)) {
+                    List<Integer> path = shortestPath(cur, next);
+                    for (int j = 1; j < path.size() - 1; j++) out.add(path.get(j));
                 }
             }
         }
         return out;
+    }
+
+    // True only for a direct junction↔edge adjacency-map entry. Edge→edge and
+    // node→node are never direct — the region map has no such adjacency — so they
+    // always fall through to BFS inference in inferSkips.
+    private boolean directlyConnected(int a, int b) {
+        if (a > 0 && b < 0) return adjacency.getOrDefault(a, Set.of()).contains(b);
+        if (a < 0 && b > 0) return adjacency.getOrDefault(b, Set.of()).contains(a);
+        return false;
     }
 
     // -------------------------------------------------------------------------

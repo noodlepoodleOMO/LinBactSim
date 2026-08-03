@@ -28,7 +28,8 @@
       "Bash(sudo apt-get install -y openjdk-17-jdk maven)",
       "Bash(sudo -n true)",
       "Bash(sudo -l)",
-      "Read(//etc/sudoers.d/**)"
+      "Read(//etc/sudoers.d/**)",
+      "Bash(awk -F: '$1<660')"
     ]
   }
 }
