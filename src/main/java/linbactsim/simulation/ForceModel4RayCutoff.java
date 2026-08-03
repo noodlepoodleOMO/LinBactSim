@@ -7,14 +7,24 @@ import linbactsim.model.Pixel;
 import java.util.ArrayList;
 import java.util.List;
 
-// ForceModel4Ray variant: force returns 0 for wall distances > 50 µm (no attraction or repulsion).
+// ForceModel4Ray variant: force tapers smoothly to 0 between TAPER_START_UM and FORCE_CUTOFF_UM,
+// and stays 0 beyond FORCE_CUTOFF_UM (no attraction or repulsion).
 public class ForceModel4RayCutoff implements MovementModel {
 
     private static final double CONCAVE_NOISE_BURST_FACTOR = 5.0;
+    private static final double TAPER_START_UM = 40.0;
     private static final double FORCE_CUTOFF_UM = 50.0;
 
+    // Half-cosine taper: 1 for dist <= TAPER_START_UM, smoothly down to 0 at FORCE_CUTOFF_UM, 0 beyond.
+    private static double taper(double dist) {
+        if (dist <= TAPER_START_UM) return 1.0;
+        if (dist >= FORCE_CUTOFF_UM) return 0.0;
+        double t = (dist - TAPER_START_UM) / (FORCE_CUTOFF_UM - TAPER_START_UM);
+        return 0.5 * (1.0 + Math.cos(Math.PI * t));
+    }
+
     private static double force(Bacterium bacterium, double dist) {
-        return dist > FORCE_CUTOFF_UM ? 0.0 : bacterium.forceAtDistance(dist);
+        return bacterium.forceAtDistance(dist) * taper(dist);
     }
 
     @Override
