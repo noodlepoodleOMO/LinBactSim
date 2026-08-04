@@ -55,7 +55,6 @@ public class ForceModel4RayCutoff implements MovementModel {
                     bacterium.setContinuousPosition(p.getRow(), p.getCol());
                     bacterium.recordPosition(p.getRow(), p.getCol());
                     maze.getPixel(p.getRow(), p.getCol()).addCount();
-                    if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
                 }
                 bacterium.addTime(dt);
             } else {
@@ -402,6 +401,7 @@ public class ForceModel4RayCutoff implements MovementModel {
             maze.getPixel(lastFreeRow, lastFreeCol).addCount();
         }
         if (collisionPixel == null) { bacterium.addTime(dt); return; }
+        if (maze.getPixel(lastFreeRow, lastFreeCol).isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
 
         double usedDist = Math.sqrt((lastFreeRow-row)*(lastFreeRow-row) + (lastFreeCol-col)*(lastFreeCol-col));
         double remaining = totalDist - usedDist;
@@ -454,11 +454,13 @@ public class ForceModel4RayCutoff implements MovementModel {
                 bacterium.setContinuousPosition(slideEndRow, slideEndCol);
                 bacterium.recordPosition(slideEndRow, slideEndCol);
                 maze.getPixel(slideEndRow, slideEndCol).addCount();
-                if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
             }
 
             if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
                 bacterium.setHeading(0.0, 0.0); bacterium.scheduleConcaveNoiseBurst(); break;
+            }
+            if (nextCollision != null && maze.getPixel(slideEndRow, slideEndCol).isExit()) {
+                bacterium.setExited(true); bacterium.addTime(dt); return;
             }
             if (nextCollision == null) { remaining = 0; break; }
 

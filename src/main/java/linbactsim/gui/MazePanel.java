@@ -69,6 +69,8 @@ public class MazePanel extends JPanel {
 
         JButton setStartButton = new JButton("Set Start");
         JButton setExitButton  = new JButton("Set Exit");
+        setExitButton.setToolTipText("Exit tiles must be open pixels adjacent to a wall pixel — "
+                + "a bacterium only exits when it collides with the wall next to the exit tile it was last on.");
         JButton setWallButton  = new JButton("Set Wall");
 
         JPanel popupPanel  = new JPanel(new BorderLayout());

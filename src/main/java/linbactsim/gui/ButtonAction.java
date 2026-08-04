@@ -168,6 +168,8 @@ public class ButtonAction {
         JToggleButton selectBtn  = new JToggleButton("Select", true);
         JToggleButton wallBtn    = new JToggleButton("Draw Wall");
         JToggleButton exitBtn    = new JToggleButton("Draw Exit");
+        exitBtn.setToolTipText("Exit tiles must be open pixels adjacent to a wall pixel — "
+                + "a bacterium only exits when it collides with the wall next to the exit tile it was last on.");
         JToggleButton eraseBtn   = new JToggleButton("Erase");
 
         // remedyBtn and deleteJBtn live in the Analysis bar but share this group
