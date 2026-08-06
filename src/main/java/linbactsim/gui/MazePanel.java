@@ -69,8 +69,8 @@ public class MazePanel extends JPanel {
 
         JButton setStartButton = new JButton("Set Start");
         JButton setExitButton  = new JButton("Set Exit");
-        setExitButton.setToolTipText("Exit tiles must be open pixels adjacent to a wall pixel — "
-                + "a bacterium only exits when it collides with the wall next to the exit tile it was last on.");
+        setExitButton.setToolTipText("Exit tiles must be open (non-wall) pixels — "
+                + "a bacterium exits as soon as its trajectory crosses one.");
         JButton setWallButton  = new JButton("Set Wall");
 
         JPanel popupPanel  = new JPanel(new BorderLayout());
@@ -481,6 +481,9 @@ public class MazePanel extends JPanel {
 
             int[] probe = b.getProbeNextPos();
             if (probe != null) {
+                if (b.isProbeWillExit()) {
+                    sb.append("<br><b>Will exit next step</b>");
+                }
                 if (b.isProbeHadCollision()) {
                     String si = b.getProbeSlideInfo();
                     if (si != null) {

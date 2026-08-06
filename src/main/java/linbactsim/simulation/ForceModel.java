@@ -43,6 +43,7 @@ public class ForceModel implements MovementModel {
                     bacterium.setContinuousPosition(p.getRow(), p.getCol());
                     bacterium.recordPosition(p.getRow(), p.getCol());
                     maze.getPixel(p.getRow(), p.getCol()).addCount();
+                    if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
                 }
                 bacterium.addTime(dt);
             } else {
@@ -155,6 +156,7 @@ public class ForceModel implements MovementModel {
         if (bacterium.hasExited()) return;
         bacterium.setProbeSlideInfo(null);
         bacterium.setLastProbedWallPixels(null);
+        bacterium.setProbeWillExit(false);
 
         bacterium.ensureHeadingInitialized();
         int[] pos = bacterium.getPosition();
@@ -239,7 +241,11 @@ public class ForceModel implements MovementModel {
 
         if (!collision) {
             int pr = row, pc = col;
-            for (int i = 1; i < path.size(); i++) { pr = path.get(i).getRow(); pc = path.get(i).getCol(); }
+            for (int i = 1; i < path.size(); i++) {
+                Pixel p = path.get(i);
+                pr = p.getRow(); pc = p.getCol();
+                if (p.isExit()) { bacterium.setProbeWillExit(true); break; }
+            }
             bacterium.setProbeResult(pr, pc, false, null, null);
         } else {
             int b2 = maze.getBoundaryThickness();
@@ -267,6 +273,10 @@ public class ForceModel implements MovementModel {
         for (Pixel p : path) {
             if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) { collisionPixel = p; break; }
             lastFreeRow = p.getRow(); lastFreeCol = p.getCol();
+            if (p.isExit()) {
+                bacterium.setProbeWillExit(true);
+                return new int[][]{{lastFreeRow, lastFreeCol}, {lastFreeRow, lastFreeCol}};
+            }
         }
         if (collisionPixel == null) return null;
 
@@ -346,11 +356,19 @@ public class ForceModel implements MovementModel {
             List<Pixel> slidePath = maze.getPixelsOnLine(lastFreeRow, lastFreeCol, sRow, sCol);
             int curEndRow = lastFreeRow, curEndCol = lastFreeCol;
             Pixel nextCollision = null;
+            boolean hitExit = false;
             for (Pixel p : slidePath) {
                 if (!maze.isValid(p.getRow(), p.getCol()) || p.isWall()) { nextCollision = p; break; }
                 curEndRow = p.getRow(); curEndCol = p.getCol();
+                if (p.isExit()) { hitExit = true; break; }
             }
             slideEndRow = curEndRow; slideEndCol = curEndCol;
+
+            if (hitExit) {
+                bacterium.setProbeWillExit(true);
+                if (bacterium != null) bacterium.setProbeSlideInfo(slideLog.length() > 0 ? slideLog.toString() : null);
+                return new int[][]{{lastFreeRow, lastFreeCol}, {slideEndRow, slideEndCol}};
+            }
 
             if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
                 slideLog.append("(blocked)"); break;
@@ -387,9 +405,9 @@ public class ForceModel implements MovementModel {
             bacterium.setContinuousPosition(lastFreeRow, lastFreeCol);
             bacterium.recordPosition(lastFreeRow, lastFreeCol);
             maze.getPixel(lastFreeRow, lastFreeCol).addCount();
+            if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
         }
         if (collisionPixel == null) { bacterium.addTime(dt); return; }
-        if (maze.getPixel(lastFreeRow, lastFreeCol).isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
 
         double usedDist = Math.sqrt((lastFreeRow-row)*(lastFreeRow-row) + (lastFreeCol-col)*(lastFreeCol-col));
         double remaining = totalDist - usedDist;
@@ -442,13 +460,11 @@ public class ForceModel implements MovementModel {
                 bacterium.setContinuousPosition(slideEndRow, slideEndCol);
                 bacterium.recordPosition(slideEndRow, slideEndCol);
                 maze.getPixel(slideEndRow, slideEndCol).addCount();
+                if (p.isExit()) { bacterium.setExited(true); bacterium.addTime(dt); return; }
             }
 
             if (slideEndRow == lastFreeRow && slideEndCol == lastFreeCol) {
                 bacterium.setHeading(0.0, 0.0); bacterium.scheduleConcaveNoiseBurst(); break;
-            }
-            if (nextCollision != null && maze.getPixel(slideEndRow, slideEndCol).isExit()) {
-                bacterium.setExited(true); bacterium.addTime(dt); return;
             }
             if (nextCollision == null) { remaining = 0; break; }
 

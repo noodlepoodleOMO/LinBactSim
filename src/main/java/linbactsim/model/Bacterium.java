@@ -285,6 +285,12 @@ public class Bacterium {
     public int[]   getProbeLastFreePos()  { return probeLastFreePos; }
     public int[]   getProbeSlidePos()     { return probeSlidePos; }
 
+    // Set by probeFullStep when the predicted trajectory crosses an exit pixel.
+    private boolean probeWillExit = false;
+
+    public void    setProbeWillExit(boolean willExit) { this.probeWillExit = willExit; }
+    public boolean isProbeWillExit()                  { return probeWillExit; }
+
     public void   setLastSampledDisplacement(double d) { this.lastSampledDisplacement = d; }
     public double getLastSampledDisplacement()         { return lastSampledDisplacement; }
 
