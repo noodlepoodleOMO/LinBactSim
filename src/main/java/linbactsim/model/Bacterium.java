@@ -67,6 +67,18 @@ public class Bacterium {
     private double  lastSampledDisplacement = 0.0;
     private String  probeSlideInfo          = null;
 
+    // ---- Real-step counter (probeFullStep does NOT advance this) ----
+    private int stepCount = 0;
+
+    // ---- Inertial initialization heading — forces the step-0 heading,
+    // overriding the noise+wall+memory blend for exactly one step ----
+    private double initHeadingRow, initHeadingCol;
+    private boolean hasInitHeading = false;
+
+    // ---- Final post-blend/post-clamp heading from the most recent
+    // computeDirection()/probeFullStep() call, for accurate tooltip display ----
+    private double lastCombinedRow, lastCombinedCol;
+
     // Source: SURE.Bacterium(int, int, double, int, int, double, double, BacteriumSpecies)
     // velocity and stdDev are now fixed per-species; they are no longer constructor params.
     public Bacterium(int length, int width, int row, int col, double noise,
@@ -309,4 +321,36 @@ public class Bacterium {
 
     public void        setLastProbedWallPixels(List<int[]> pixels) { this.lastProbedWallPixels = pixels; }
     public List<int[]> getLastProbedWallPixels()                   { return lastProbedWallPixels; }
+
+    // -------------------------------------------------------------------------
+    // Real-step counter — incremented once per real step() call (not probes),
+    // used to gate the one-shot inertial init-heading override.
+    // -------------------------------------------------------------------------
+
+    public int  getStepCount()       { return stepCount; }
+    public void incrementStepCount() { stepCount++; }
+
+    // -------------------------------------------------------------------------
+    // Inertial initialization heading (forces step-0 heading)
+    // -------------------------------------------------------------------------
+
+    // row/col must already be a unit vector.
+    public void setInitHeading(double row, double col) {
+        this.initHeadingRow = row;
+        this.initHeadingCol = col;
+        this.hasInitHeading = true;
+    }
+
+    public boolean isHasInitHeading()  { return hasInitHeading; }
+    public double  getInitHeadingRow() { return initHeadingRow; }
+    public double  getInitHeadingCol() { return initHeadingCol; }
+
+    // -------------------------------------------------------------------------
+    // Final combined heading from the last computeDirection()/probeFullStep()
+    // call — used by the GUI tooltip instead of recomputing the blend.
+    // -------------------------------------------------------------------------
+
+    public void   setLastCombined(double row, double col) { lastCombinedRow = row; lastCombinedCol = col; }
+    public double getLastCombinedRow() { return lastCombinedRow; }
+    public double getLastCombinedCol() { return lastCombinedCol; }
 }

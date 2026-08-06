@@ -83,7 +83,8 @@ public class BulkSimulation {
     // -------------------------------------------------------------------------
 
     private record BacteriumInit(int row, int col, BacteriumSpecies species,
-                                 int length, int width) {}
+                                 int length, int width,
+                                 boolean hasInitHeading, double initHeadingRow, double initHeadingCol) {}
     
     // record: immutable data carrier type declaration
     // private final fields, accessor methods named after the field e.g. .row() .col()
@@ -146,6 +147,9 @@ public class BulkSimulation {
                                         angle, init.species());
                                 b.setDirectionWeights(wM, wN, wW);
                                 b.setCornerDwellParams(dwellThresholdDeg, dwellFactor);
+                                if (init.hasInitHeading()) {
+                                    b.setInitHeading(init.initHeadingRow(), init.initHeadingCol());
+                                }
                                 maze.addBacterium(b);
                             }
 
@@ -215,7 +219,8 @@ public class BulkSimulation {
             Bacterium b = maze.getBacterium(i);
             int[] pos = b.getTrajectory().get(0);
             list.add(new BacteriumInit(
-                    pos[0], pos[1], b.getSpecies(), b.getLength(), b.getWidth()));
+                    pos[0], pos[1], b.getSpecies(), b.getLength(), b.getWidth(),
+                    b.isHasInitHeading(), b.getInitHeadingRow(), b.getInitHeadingCol()));
         }
         return list;
     }

@@ -43,6 +43,19 @@ public class SimulationParameters {
         }
     }
 
+    // Parses a comma-separated list of integers (e.g. "1, 2, 0"). Returns
+    // null if text is blank (meaning "not specified"); throws
+    // NumberFormatException if any token fails to parse.
+    public static int[] parseIntCsv(String text) {
+        if (text == null || text.trim().isEmpty()) return null;
+        String[] parts = text.split(",");
+        int[] result = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Integer.parseInt(parts[i].trim());
+        }
+        return result;
+    }
+
     // Source: SURE.Main start-button anonymous ActionListener init block
     // Computes maxSteps from duration+dt or falls back to explicit step count.
     public int getMaxSteps() {

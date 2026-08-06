@@ -57,6 +57,17 @@ public class ButtonAction {
     private final JTextField wWallField    = new JTextField("0.30",6);
     private final JTextField dwellThresholdField = new JTextField("20", 6);
     private final JTextField dwellFactorField    = new JTextField("0.3",6);
+    private final JTextField initRowField  = new JTextField("",    8);
+    private final JTextField initColField  = new JTextField("",    8);
+    {
+        String tip = "Comma-separated integers giving one or more (row, col) momentum "
+                + "directions for the first step only, e.g. \"1, 0\" / \"2, 0\". Bacteria "
+                + "created are split evenly across the groups. A (0,0) pair means that "
+                + "group uses normal noise+wall+memory logic instead. Leave both blank "
+                + "to disable (default).";
+        initRowField.setToolTipText(tip);
+        initColField.setToolTipText(tip);
+    }
     private final JTextField rowField      = new JTextField("-1",  5);
     private final JTextField colField      = new JTextField("-1",  5);
     private final JTextField countField    = new JTextField("1",   5);
@@ -278,6 +289,8 @@ public class ButtonAction {
         addRow(pp, g2, 5, "w Wall:",   wWallField);
         addRow(pp, g2, 6, "Dwell Thresh (°):", dwellThresholdField);
         addRow(pp, g2, 7, "Dwell Factor:",     dwellFactorField);
+        addRow(pp, g2, 8, "Init Row:",    initRowField);
+        addRow(pp, g2, 9, "Init Column:", initColField);
         outer.add(pp);
 
         // --- Bacteria placement -----------------------------------------------
@@ -484,15 +497,64 @@ public class ButtonAction {
         boolean useFixed = reqRow >= 0 && reqCol >= 0
                 && maze.isValid(reqRow, reqCol) && !maze.isWall(reqRow, reqCol);
 
-        for (int i = 0; i < count; i++) {
-            Bacterium b = useFixed
-                    ? new Bacterium(len, wid, reqRow, reqCol, params.getAngleNoise(), species)
-                    : new Bacterium(len, wid, maze, params.getAngleNoise(), species);
-            b.setDirectionWeights(params.getWMemory(), params.getWNoise(), params.getWWall());
-            b.setCornerDwellParams(params.getDwellThresholdDeg(), params.getDwellFactor());
-            maze.addBacterium(b);
+        int[] initRows, initCols;
+        try {
+            initRows = SimulationParameters.parseIntCsv(initRowField.getText());
+            initCols = SimulationParameters.parseIntCsv(initColField.getText());
+        } catch (NumberFormatException ex) {
+            error("Init Row / Init Column must be comma-separated integers.");
+            return;
+        }
+
+        if ((initRows == null) != (initCols == null)) {
+            error("Init Row and Init Column must both be filled, or both left empty.");
+            return;
+        }
+
+        boolean useInitHeading = initRows != null;
+        if (useInitHeading && initRows.length != initCols.length) {
+            error("Init Row and Init Column must have the same number of comma-separated "
+                    + "values (" + initRows.length + " vs " + initCols.length + ").");
+            return;
+        }
+
+        int groupCount = useInitHeading ? initRows.length : 1;
+        int[] groupSizes = splitCounts(count, groupCount);
+
+        for (int g = 0; g < groupCount; g++) {
+            boolean groupHasOverride = useInitHeading && !(initRows[g] == 0 && initCols[g] == 0);
+            double unitRow = 0, unitCol = 0;
+            if (groupHasOverride) {
+                double mag = Math.sqrt((double) initRows[g] * initRows[g] + (double) initCols[g] * initCols[g]);
+                unitRow = initRows[g] / mag;
+                unitCol = initCols[g] / mag;
+            }
+
+            for (int i = 0; i < groupSizes[g]; i++) {
+                Bacterium b = useFixed
+                        ? new Bacterium(len, wid, reqRow, reqCol, params.getAngleNoise(), species)
+                        : new Bacterium(len, wid, maze, params.getAngleNoise(), species);
+                b.setDirectionWeights(params.getWMemory(), params.getWNoise(), params.getWWall());
+                b.setCornerDwellParams(params.getDwellThresholdDeg(), params.getDwellFactor());
+                if (groupHasOverride) b.setInitHeading(unitRow, unitCol);
+                maze.addBacterium(b);
+                runner.getMovementModel().probeFullStep(b, maze, params.getDt());
+            }
         }
         panel.repaint();
+    }
+
+    // Distributes `total` into `groups` near-equal integer bucket sizes.
+    // Remainder (total % groups) goes to the last `remainder` groups,
+    // e.g. splitCounts(100, 3) -> [33, 33, 34].
+    private static int[] splitCounts(int total, int groups) {
+        int base = total / groups;
+        int rem  = total % groups;
+        int[] sizes = new int[groups];
+        for (int i = 0; i < groups; i++) {
+            sizes[i] = base + (i >= groups - rem ? 1 : 0);
+        }
+        return sizes;
     }
 
     private void onRunFast() {

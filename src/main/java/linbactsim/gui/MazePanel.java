@@ -473,8 +473,8 @@ public class MazePanel extends JPanel {
             sb.append("<br>Noise  ×w: (r=").append(fmt(wNoi * noise[0])).append(", c=").append(fmt(wNoi * noise[1])).append(")");
             sb.append("<br>Inertia×w: (r=").append(fmt(wMem * hRow)).append(", c=").append(fmt(wMem * hCol)).append(")");
 
-            double combRow = wMem * hRow + wNoi * noise[0] + wWal * wall[0];
-            double combCol = wMem * hCol + wNoi * noise[1] + wWal * wall[1];
+            double combRow = b.getLastCombinedRow();
+            double combCol = b.getLastCombinedCol();
             sb.append("<br>Combined:  (r=").append(fmt(combRow)).append(", c=").append(fmt(combCol)).append(")");
 
             sb.append("<br>Step dist: ").append(fmt(b.getLastSampledDisplacement())).append(" px");

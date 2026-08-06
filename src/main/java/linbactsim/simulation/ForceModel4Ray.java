@@ -23,6 +23,7 @@ public class ForceModel4Ray implements MovementModel {
         int row = pos[0], col = pos[1];
 
         double dir           = computeDirection(bacterium, maze, bacterium.getNoise());
+        bacterium.incrementStepCount();
         double verticalDir   = Math.sin(dir);
         double horizontalDir = Math.cos(dir);
 
@@ -57,6 +58,15 @@ public class ForceModel4Ray implements MovementModel {
     @Override
     public double computeDirection(Bacterium bacterium, Maze maze, double noiseBound) {
         bacterium.ensureHeadingInitialized();
+
+        if (bacterium.getStepCount() == 0 && bacterium.isHasInitHeading()) {
+            double combRow = bacterium.getInitHeadingRow();
+            double combCol = bacterium.getInitHeadingCol();
+            bacterium.setHeading(combRow, combCol);
+            bacterium.setLastVectorInfo("Init", new double[4], new double[4], 0, 0, 0, 0);
+            bacterium.setLastCombined(combRow, combCol);
+            return Math.atan2(combRow, combCol);
+        }
 
         int[] pos = bacterium.getPosition();
         int row = pos[0], col = pos[1];
@@ -146,6 +156,7 @@ public class ForceModel4Ray implements MovementModel {
             if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
         }
 
+        bacterium.setLastCombined(combRow, combCol);
         bacterium.setHeading(combRow, combCol);
         return Math.atan2(combRow, combCol);
     }
@@ -164,17 +175,6 @@ public class ForceModel4Ray implements MovementModel {
         int[] pos = bacterium.getPosition();
         int row = pos[0], col = pos[1];
 
-        double[] d = getDistanceToWall(maze, row, col, bacterium.getForcePixelSize());
-        double fUp    = bacterium.forceAtDistance(d[0]);
-        double fDown  = bacterium.forceAtDistance(d[1]);
-        double fRight = bacterium.forceAtDistance(d[2]);
-        double fLeft  = bacterium.forceAtDistance(d[3]);
-
-        double wallRow = fUp - fDown;
-        double wallCol = fLeft - fRight;
-        double[] wallU = unit(wallRow, wallCol);
-        wallRow = wallU[0]; wallCol = wallU[1];
-
         // Collect the 4 directional wall pixels for display
         List<int[]> probedPixels = new ArrayList<>();
         int[] wUp    = getFirstWallPixel(maze, row, col, -1,  0); if (wUp    != null) probedPixels.add(wUp);
@@ -183,43 +183,62 @@ public class ForceModel4Ray implements MovementModel {
         int[] wLeft  = getFirstWallPixel(maze, row, col,  0, -1); if (wLeft  != null) probedPixels.add(wLeft);
         bacterium.setLastProbedWallPixels(probedPixels);
 
-        double headingRow = bacterium.getHeadingRow();
-        double headingCol = bacterium.getHeadingCol();
-        double currentAngle;
-        if (norm(headingRow, headingCol) >= 1e-9)
-            currentAngle = Math.atan2(headingRow, headingCol);
-        else if (norm(wallRow, wallCol) >= 1e-9)
-            currentAngle = Math.atan2(wallRow, wallCol);
-        else
-            currentAngle = Math.random() * 2.0 * Math.PI;
+        double combRow, combCol;
+        if (bacterium.getStepCount() == 0 && bacterium.isHasInitHeading()) {
+            combRow = bacterium.getInitHeadingRow();
+            combCol = bacterium.getInitHeadingCol();
+            bacterium.setLastVectorInfo("Init", new double[4], new double[4], 0, 0, 0, 0);
+        } else {
+            double[] d = getDistanceToWall(maze, row, col, bacterium.getForcePixelSize());
+            double fUp    = bacterium.forceAtDistance(d[0]);
+            double fDown  = bacterium.forceAtDistance(d[1]);
+            double fRight = bacterium.forceAtDistance(d[2]);
+            double fLeft  = bacterium.forceAtDistance(d[3]);
 
-        double dTheta = RandomNumberGenerator.getAngleNoise(bacterium.getNoise());
-        double noisyAngle = currentAngle + dTheta;
-        double[] noiseU = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
-        double noiseRow = noiseU[0], noiseCol = noiseU[1];
+            double wallRow = fUp - fDown;
+            double wallCol = fLeft - fRight;
+            double[] wallU = unit(wallRow, wallCol);
+            wallRow = wallU[0]; wallCol = wallU[1];
 
-        bacterium.setPendingNoise(noiseRow, noiseCol);
-        bacterium.setLastVectorInfo("Force4", d,
-                new double[]{fUp, fDown, fRight, fLeft},
-                wallRow, wallCol, noiseRow, noiseCol);
+            double headingRow = bacterium.getHeadingRow();
+            double headingCol = bacterium.getHeadingCol();
+            double currentAngle;
+            if (norm(headingRow, headingCol) >= 1e-9)
+                currentAngle = Math.atan2(headingRow, headingCol);
+            else if (norm(wallRow, wallCol) >= 1e-9)
+                currentAngle = Math.atan2(wallRow, wallCol);
+            else
+                currentAngle = Math.random() * 2.0 * Math.PI;
 
-        double combRow = bacterium.getWMemory() * headingRow + bacterium.getWNoise() * noiseRow + bacterium.getWWall() * wallRow;
-        double combCol = bacterium.getWMemory() * headingCol + bacterium.getWNoise() * noiseCol + bacterium.getWWall() * wallCol;
-        if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
-        double[] cu = unit(combRow, combCol);
-        combRow = cu[0]; combCol = cu[1];
+            double dTheta = RandomNumberGenerator.getAngleNoise(bacterium.getNoise());
+            double noisyAngle = currentAngle + dTheta;
+            double[] noiseU = unit(Math.sin(noisyAngle), Math.cos(noisyAngle));
+            double noiseRow = noiseU[0], noiseCol = noiseU[1];
 
-        int boundary = maze.getBoundaryThickness();
-        boolean changed = false;
-        if (row <= boundary && combRow < 0)                          { combRow = 0; changed = true; }
-        if (row >= maze.getNumRows()-1-boundary && combRow > 0)      { combRow = 0; changed = true; }
-        if (col <= boundary && combCol < 0)                          { combCol = 0; changed = true; }
-        if (col >= maze.getNumCols()-1-boundary && combCol > 0)      { combCol = 0; changed = true; }
-        if (changed) {
-            double[] bu = unit(combRow, combCol);
-            combRow = bu[0]; combCol = bu[1];
+            bacterium.setPendingNoise(noiseRow, noiseCol);
+            bacterium.setLastVectorInfo("Force4", d,
+                    new double[]{fUp, fDown, fRight, fLeft},
+                    wallRow, wallCol, noiseRow, noiseCol);
+
+            combRow = bacterium.getWMemory() * headingRow + bacterium.getWNoise() * noiseRow + bacterium.getWWall() * wallRow;
+            combCol = bacterium.getWMemory() * headingCol + bacterium.getWNoise() * noiseCol + bacterium.getWWall() * wallCol;
             if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
+            double[] cu = unit(combRow, combCol);
+            combRow = cu[0]; combCol = cu[1];
+
+            int boundary = maze.getBoundaryThickness();
+            boolean changed = false;
+            if (row <= boundary && combRow < 0)                          { combRow = 0; changed = true; }
+            if (row >= maze.getNumRows()-1-boundary && combRow > 0)      { combRow = 0; changed = true; }
+            if (col <= boundary && combCol < 0)                          { combCol = 0; changed = true; }
+            if (col >= maze.getNumCols()-1-boundary && combCol > 0)      { combCol = 0; changed = true; }
+            if (changed) {
+                double[] bu = unit(combRow, combCol);
+                combRow = bu[0]; combCol = bu[1];
+                if (norm(combRow, combCol) < 1e-9) { combRow = wallRow; combCol = wallCol; }
+            }
         }
+        bacterium.setLastCombined(combRow, combCol);
         // NOTE: heading NOT updated — pure probe
 
         double dir = Math.atan2(combRow, combCol);
