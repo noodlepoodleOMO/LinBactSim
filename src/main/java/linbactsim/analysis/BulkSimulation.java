@@ -13,72 +13,135 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * Runs all weight-ratio combinations × noise angles, scores each against an
+ * Runs weight-ratio combinations × noise angles, scores each against an
  * experimental vertex-count histogram, and returns results sorted best-first.
  *
  * Weight ratios are defined as interpretable integer (or simple decimal) ratios.
  * Because setDirectionWeights() normalises internally, only the RATIO matters —
  * (2,1,1) and (4,2,2) produce identical behaviour.
  *
- * Ratio sets and their unique permutations (assigned to wMemory, wNoise, wWall):
+ * WEIGHT_SETS is species-specific: each row is a fixed-order [wMemory, wNoise, wWall]
+ * triple (NOT permuted — the three roles have distinct biological meaning per species).
+ * There is one block per species (VN, MM, PP, VF, EC) below; only ONE block should be
+ * uncommented at a time — comment out the other four before running, then swap which
+ * block is active to sweep the next species.
  *
- *  Equal
- *    1:1:1      → 1 combo
+ * ANGLE_LEVELS, DWELL_THRESHOLD_LEVELS, and DWELL_FACTOR_LEVELS are shared across all
+ * five species and swept the same way regardless of which WEIGHT_SETS block is active.
  *
- *  1 weight dominant, others equal
- *    2:1:1      → 3 perms  (one weight is 2× each other)
- *    3:1:1      → 3 perms  (3×)
- *    4:1:1      → 3 perms  (4×)
- *
- *  2 weights equally dominant, 1 suppressed
- *    2:2:1      → 3 perms  (pair is 2× the third)
- *    3:3:1      → 3 perms  (pair is 3× the third)
- *
- *  All three different — graded dominance
- *    3:2:1      → 6 perms  (each step ×1.5 / ×2)
- *    4:2:1      → 6 perms  (top is 4×, mid is 2×)
- *    4:3:1      → 6 perms  (top is 4×, mid is 3×)
- *    5:2:1      → 6 perms  (top is 5×, mid is 2×)
- *    5:3:1      → 6 perms  (top is 5×, mid is 3×)
- *    3:2:1.5    → 6 perms  (step ×1.33 / ×1.5  — tighter gradation)
- *    4:2.5:1    → 6 perms  (step ×1.6  / ×2.5)
- *
- *  Total weight combos: 1+3+3+3 + 3+3 + 6×7 = 58
- *  × 3 noise angles {0.6, 1.6, π}
- *  × 4 dwell thresholds {0, 10, 20, 30}°
- *  × 5 dwell factors {0.1, 0.3, 0.5, 0.7, 1.0} = 3480 runs
+ * The original full-parameter-space sweep (RATIO_SETS + uniquePermutations(), which
+ * permuted a generic set of ratios across all three weight roles) is preserved
+ * commented-out throughout this file for reverting to that search.
  */
 public class BulkSimulation {
 
-    // Each row is one ratio set [wMemory_ratio, wNoise_ratio, wWall_ratio].
-    // All unique permutations are generated automatically.
-    private static final double[][] RATIO_SETS = {
-        // equal
-        {1,   1,   1  },
-        // 1 dominant
-        {2,   1,   1  },
-        {3,   1,   1  },
-        {4,   1,   1  },
-        // 2 equally dominant
-        {2,   2,   1  },
-        {3,   3,   1  },
-        // graded — all three different
+    // -------------------------------------------------------------------------
+    // Per-species weight sets [wMemory, wNoise, wWall] (fixed order — not permuted).
+    // Only ONE block should be uncommented at a time. Comment out the other four
+    // before running; species order in code/GUI is always VN -> MM -> PP -> VF -> EC.
+    // -------------------------------------------------------------------------
+
+    // --- VN --- base weights 0.4 / 0.4 / 0.2  (ratio 2:2:1)
+    private static final double[][] WEIGHT_SETS = {
+        {2,   2,   1  },   // base
         {3,   2,   1  },
-        {4,   2,   1  },
-        {4,   3,   1  },
-        {5,   2,   1  },
-        {5,   3,   1  },
-        {3,   2,   1.5},
-        {4,   2.5, 1  },
+        {2,   3,   1  },
+        {3,   3,   1  },
+        {2,   2,   1.5},
+        {2,   2,   0  },   // base
+        {3,   2,   0  },
+        {2,   3,   0  },
+        {3,   3,   0  },
+        {2,   2,   0 },
+        
     };
+
+    // --- MM --- base weights 0.2 / 0.2 / 0.6  (ratio 1:1:3)
+    // private static final double[][] WEIGHT_SETS = {
+    //     {1,   1,   3},   // base
+    //     {1,   1,   2},
+    //     {1,   1,   4},
+    //     {1,   2,   3},
+    //     {2,   1,   3},
+    // };
+
+    // --- PP --- base weights 0.286 / 0.143 / 0.571  (ratio 2:1:4)
+    // private static final double[][] WEIGHT_SETS = {
+    //     {2,   1,   4},   // base
+    //     {2,   1,   3},
+    //     {2,   1,   5},
+    //     {1.5, 1,   4},
+    //     {2.5, 1,   4},
+    // };
+
+    // --- VF --- base weights 0.533 / 0.133 / 0.333  (ratio 4:1:2.5)
+    // private static final double[][] WEIGHT_SETS = {
+    //     {4,   1,   2.5},   // base
+    //     {4,   1,   2  },
+    //     {4,   1,   3  },
+    //     {3,   1,   2.5},
+    //     {5,   1,   2.5},
+    // };
+
+    // --- EC --- base weights 0.462 / 0.308 / 0.231  (ratio 6:4:3)
+    // private static final double[][] WEIGHT_SETS = {
+    //     {6,   4,   3},   // base
+     //    {6,   4,   2},
+    //     {6,   4,   4},
+    //     {5,   4,   3},
+    //     {7,   4,   3},
+    // };
+
+    // -------------------------------------------------------------------------
+    // ORIGINAL full parameter-space sweep (pre species-specific search). Kept here
+    // commented out for reverting. Each row is one ratio set [wMemory_ratio,
+    // wNoise_ratio, wWall_ratio]; all unique permutations of each row were generated
+    // via uniquePermutations() (below) and swept across all three weight roles.
+    //
+    //  Equal
+    //    1:1:1      → 1 combo
+    //  1 weight dominant, others equal
+    //    2:1:1      → 3 perms  (one weight is 2× each other)
+    //    3:1:1      → 3 perms  (3×)
+    //    4:1:1      → 3 perms  (4×)
+    //  2 weights equally dominant, 1 suppressed
+    //    2:2:1      → 3 perms  (pair is 2× the third)
+    //    3:3:1      → 3 perms  (pair is 3× the third)
+    //  All three different — graded dominance
+    //    3:2:1      → 6 perms  (each step ×1.5 / ×2)
+    //    4:2:1      → 6 perms  (top is 4×, mid is 2×)
+    //    4:3:1      → 6 perms  (top is 4×, mid is 3×)
+    //    5:2:1      → 6 perms  (top is 5×, mid is 2×)
+    //    5:3:1      → 6 perms  (top is 5×, mid is 3×)
+    //    3:2:1.5    → 6 perms  (step ×1.33 / ×1.5  — tighter gradation)
+    //    4:2.5:1    → 6 perms  (step ×1.6  / ×2.5)
+    //  Total weight combos: 1+3+3+3 + 3+3 + 6×7 = 58
+    // -------------------------------------------------------------------------
+    // private static final double[][] RATIO_SETS = {
+    //     // equal
+    //     {1,   1,   1  },
+    //     // 1 dominant
+    //     {2,   1,   1  },
+    //     {3,   1,   1  },
+    //     {4,   1,   1  },
+    //     // 2 equally dominant
+    //     {2,   2,   1  },
+    //     {3,   3,   1  },
+    //     // graded — all three different
+    //     {3,   2,   1  },
+    //     {4,   2,   1  },
+    //     {4,   3,   1  },
+    //     {5,   2,   1  },
+    //     {5,   3,   1  },
+    //     {3,   2,   1.5},
+    //     {4,   2.5, 1  },
+    // };
 
     public static final double[] ANGLE_LEVELS = {0.6, 1.6, Math.PI};
 
     // Corner-dwelling params swept the same way as ANGLE_LEVELS — see Bacterium.setCornerDwellParams().
-    // factor=1.0 is a true physics no-op (headOnFactor always returns 1.0 either way), included
-    // as a baseline control alongside the swept values.
-    public static final double[] DWELL_THRESHOLD_LEVELS = {0, 10, 20, 30};
-    public static final double[] DWELL_FACTOR_LEVELS = {0.1, 0.3, 0.5, 0.7, 1.0};
+    public static final double[] DWELL_THRESHOLD_LEVELS = {0, 5, 10, 15};
+    public static final double[] DWELL_FACTOR_LEVELS = {0.1, 0.3, 0.5};
 
     // -------------------------------------------------------------------------
 
@@ -103,10 +166,15 @@ public class BulkSimulation {
 
     /** Returns the total number of (weight combo × angle) runs that will be executed. */
     public static int totalCombos() {
-        int count = 0;
-        for (double[] rs : RATIO_SETS) count += uniquePermutations(rs).size();
-        return count * ANGLE_LEVELS.length * DWELL_THRESHOLD_LEVELS.length * DWELL_FACTOR_LEVELS.length;
+        return WEIGHT_SETS.length * ANGLE_LEVELS.length * DWELL_THRESHOLD_LEVELS.length * DWELL_FACTOR_LEVELS.length;
     }
+
+    // ORIGINAL totalCombos() for the full-parameter-space RATIO_SETS sweep:
+    // public static int totalCombos() {
+    //     int count = 0;
+    //     for (double[] rs : RATIO_SETS) count += uniquePermutations(rs).size();
+    //     return count * ANGLE_LEVELS.length * DWELL_THRESHOLD_LEVELS.length * DWELL_FACTOR_LEVELS.length;
+    // }
 
     /**
      * Runs all combos. progressCallback receives the 0-based combo index after each run.
@@ -130,45 +198,43 @@ public class BulkSimulation {
         List<ComboResult> results = new ArrayList<>();
         int comboIndex = 0;
 
-        for (double[] ratioSet : RATIO_SETS) {
-            for (double[] perm : uniquePermutations(ratioSet)) {
-                double wM = perm[0], wN = perm[1], wW = perm[2];
+        for (double[] w : WEIGHT_SETS) {
+            double wM = w[0], wN = w[1], wW = w[2];
 
-                for (double angle : ANGLE_LEVELS) {
-                    for (double dwellThresholdDeg : DWELL_THRESHOLD_LEVELS) {
-                        for (double dwellFactor : DWELL_FACTOR_LEVELS) {
-                            maze.clearBacteria();
-                            maze.clearDensity();
+            for (double angle : ANGLE_LEVELS) {
+                for (double dwellThresholdDeg : DWELL_THRESHOLD_LEVELS) {
+                    for (double dwellFactor : DWELL_FACTOR_LEVELS) {
+                        maze.clearBacteria();
+                        maze.clearDensity();
 
-                            for (BacteriumInit init : initList) {
-                                Bacterium b = new Bacterium(
-                                        init.length(), init.width(),
-                                        init.row(), init.col(),
-                                        angle, init.species());
-                                b.setDirectionWeights(wM, wN, wW);
-                                b.setCornerDwellParams(dwellThresholdDeg, dwellFactor);
-                                if (init.hasInitHeading()) {
-                                    b.setInitHeading(init.initHeadingRow(), init.initHeadingCol());
-                                }
-                                maze.addBacterium(b);
+                        for (BacteriumInit init : initList) {
+                            Bacterium b = new Bacterium(
+                                    init.length(), init.width(),
+                                    init.row(), init.col(),
+                                    angle, init.species());
+                            b.setDirectionWeights(wM, wN, wW);
+                            b.setCornerDwellParams(dwellThresholdDeg, dwellFactor);
+                            if (init.hasInitHeading()) {
+                                b.setInitHeading(init.initHeadingRow(), init.initHeadingCol());
                             }
-
-                            runner.runFast(maze, baseParams);
-
-                            VertexCount vc = new VertexCount();
-                            vc.compute(maze, rag, true); // exited bacteria only
-                            Map<Integer, Integer> histogram = new HashMap<>(vc.getHistogram());
-
-                            double sum = wM + wN + wW;
-                            double score = HistogramSimilarity.similarityScore(histogram, expHistogram);
-
-                            results.add(new ComboResult(
-                                    wM, wN, wW, angle, dwellThresholdDeg, dwellFactor,
-                                    wM / sum, wN / sum, wW / sum,
-                                    histogram, score, snapshotDensity(maze)));
-
-                            progressCallback.accept(comboIndex++);
+                            maze.addBacterium(b);
                         }
+
+                        runner.runFast(maze, baseParams);
+
+                        VertexCount vc = new VertexCount();
+                        vc.compute(maze, rag, true); // exited bacteria only
+                        Map<Integer, Integer> histogram = new HashMap<>(vc.getHistogram());
+
+                        double sum = wM + wN + wW;
+                        double score = HistogramSimilarity.similarityScore(histogram, expHistogram);
+
+                        results.add(new ComboResult(
+                                wM, wN, wW, angle, dwellThresholdDeg, dwellFactor,
+                                wM / sum, wN / sum, wW / sum,
+                                histogram, score, snapshotDensity(maze)));
+
+                        progressCallback.accept(comboIndex++);
                     }
                 }
             }
@@ -177,6 +243,55 @@ public class BulkSimulation {
         results.sort(Comparator.comparingDouble(ComboResult::score).reversed());
         return results;
     }
+
+    // ORIGINAL run() body for the full-parameter-space RATIO_SETS sweep (permuted
+    // across all three weight roles via uniquePermutations()). To revert: swap this
+    // in for the "for (double[] w : WEIGHT_SETS) {...}" loop above, and uncomment
+    // RATIO_SETS and uniquePermutations().
+    //
+    // for (double[] ratioSet : RATIO_SETS) {
+    //     for (double[] perm : uniquePermutations(ratioSet)) {
+    //         double wM = perm[0], wN = perm[1], wW = perm[2];
+    //
+    //         for (double angle : ANGLE_LEVELS) {
+    //             for (double dwellThresholdDeg : DWELL_THRESHOLD_LEVELS) {
+    //                 for (double dwellFactor : DWELL_FACTOR_LEVELS) {
+    //                     maze.clearBacteria();
+    //                     maze.clearDensity();
+    //
+    //                     for (BacteriumInit init : initList) {
+    //                         Bacterium b = new Bacterium(
+    //                                 init.length(), init.width(),
+    //                                 init.row(), init.col(),
+    //                                 angle, init.species());
+    //                         b.setDirectionWeights(wM, wN, wW);
+    //                         b.setCornerDwellParams(dwellThresholdDeg, dwellFactor);
+    //                         if (init.hasInitHeading()) {
+    //                             b.setInitHeading(init.initHeadingRow(), init.initHeadingCol());
+    //                         }
+    //                         maze.addBacterium(b);
+    //                     }
+    //
+    //                     runner.runFast(maze, baseParams);
+    //
+    //                     VertexCount vc = new VertexCount();
+    //                     vc.compute(maze, rag, true); // exited bacteria only
+    //                     Map<Integer, Integer> histogram = new HashMap<>(vc.getHistogram());
+    //
+    //                     double sum = wM + wN + wW;
+    //                     double score = HistogramSimilarity.similarityScore(histogram, expHistogram);
+    //
+    //                     results.add(new ComboResult(
+    //                             wM, wN, wW, angle, dwellThresholdDeg, dwellFactor,
+    //                             wM / sum, wN / sum, wW / sum,
+    //                             histogram, score, snapshotDensity(maze)));
+    //
+    //                     progressCallback.accept(comboIndex++);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     /** Exports all results as a ranked CSV. */
     public static void exportCsv(List<ComboResult> results, File file) throws IOException {
@@ -225,17 +340,18 @@ public class BulkSimulation {
         return list;
     }
 
-    /** Returns all unique permutations of a length-3 array. */
-    private static List<double[]> uniquePermutations(double[] arr) {
-        int[][] orders = {{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};
-        Set<String> seen = new LinkedHashSet<>();
-        List<double[]> result = new ArrayList<>();
-        for (int[] o : orders) {
-            double[] p = {arr[o[0]], arr[o[1]], arr[o[2]]};
-            // Use rounded string key so 1.0 vs 1.000000001 don't create duplicates
-            String key = String.format("%.6f,%.6f,%.6f", p[0], p[1], p[2]);
-            if (seen.add(key)) result.add(p);
-        }
-        return result;
-    }
+    // ORIGINAL: returns all unique permutations of a length-3 array. Used by the
+    // full-parameter-space RATIO_SETS sweep above — see run()'s commented-out loop.
+    // private static List<double[]> uniquePermutations(double[] arr) {
+    //     int[][] orders = {{0,1,2},{0,2,1},{1,0,2},{1,2,0},{2,0,1},{2,1,0}};
+    //     Set<String> seen = new LinkedHashSet<>();
+    //     List<double[]> result = new ArrayList<>();
+    //     for (int[] o : orders) {
+    //         double[] p = {arr[o[0]], arr[o[1]], arr[o[2]]};
+    //         // Use rounded string key so 1.0 vs 1.000000001 don't create duplicates
+    //         String key = String.format("%.6f,%.6f,%.6f", p[0], p[1], p[2]);
+    //         if (seen.add(key)) result.add(p);
+    //     }
+    //     return result;
+    // }
 }

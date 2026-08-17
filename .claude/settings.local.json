@@ -32,7 +32,10 @@
       "Bash(awk -F: '$1<660')",
       "Bash(mvn -q compile)",
       "Bash(git rm *)",
-      "Bash(awk 'NR==660,NR==695' /workspace/src/main/java/linbactsim/gui/ButtonAction.java)"
+      "Bash(awk 'NR==660,NR==695' /workspace/src/main/java/linbactsim/gui/ButtonAction.java)",
+      "Bash(git -C /workspace log -p -1 d57d3d8 -- src/main/java/linbactsim/analysis/BulkSimulation.java)",
+      "Bash(git -C /workspace diff -- src/main/java/linbactsim/analysis/BulkSimulation.java)",
+      "Bash(git checkout *)"
     ]
   }
 }
