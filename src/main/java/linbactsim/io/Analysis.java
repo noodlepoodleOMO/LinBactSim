@@ -48,6 +48,50 @@ public class Analysis {
         }
     }
 
+    // Exports per-iteration bacterium positions for MSD analysis: one column per
+    // bacterium (like exportTrajectories), but instead of every intra-step pixel,
+    // each iteration (one dt tick) contributes two rows — the pixel roughly at its
+    // temporal midpoint (~dt/2) and the pixel at its end (dt) — so the "Time (s)"
+    // column advances in dt/2 increments. Already-exited bacteria repeat their
+    // last position in later rows.
+    public static void exportMsdPositions(Maze maze, int dt, File file) throws IOException {
+        try (Workbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("MSD Positions");
+
+            Row header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Time (s)");
+            for (int i = 0; i < maze.getBacteriaCount(); i++) {
+                header.createCell(i + 1).setCellValue("Bacterium " + (i + 1));
+            }
+
+            int maxIterations = 0;
+            for (int i = 0; i < maze.getBacteriaCount(); i++)
+                maxIterations = Math.max(maxIterations, maze.getBacterium(i).getIterationPositions().size());
+
+            for (int iter = 0; iter < maxIterations; iter++) {
+                Row subRow  = sheet.createRow(2 * iter + 1);
+                Row fullRow = sheet.createRow(2 * iter + 2);
+                subRow.createCell(0).setCellValue((iter + 0.5) * dt);
+                fullRow.createCell(0).setCellValue((iter + 1.0) * dt);
+
+                for (int i = 0; i < maze.getBacteriaCount(); i++) {
+                    Bacterium b = maze.getBacterium(i);
+                    List<int[]> subPositions  = b.getSubIterationPositions();
+                    List<int[]> fullPositions = b.getIterationPositions();
+                    if (iter < subPositions.size()) {
+                        int[] p = subPositions.get(iter);
+                        subRow.createCell(i + 1).setCellValue("[" + p[0] + ", " + p[1] + "]");
+                    }
+                    if (iter < fullPositions.size()) {
+                        int[] p = fullPositions.get(iter);
+                        fullRow.createCell(i + 1).setCellValue("[" + p[0] + ", " + p[1] + "]");
+                    }
+                }
+            }
+            writeWorkbook(wb, file);
+        }
+    }
+
     // Source: SURE.Main downloadSummaryButton ActionListener (~lines 804–840)
     public static void exportStepSummary(Maze maze, File file) throws IOException {
         try (Workbook wb = new XSSFWorkbook()) {

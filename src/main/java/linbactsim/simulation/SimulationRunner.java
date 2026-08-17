@@ -5,6 +5,7 @@ import linbactsim.model.Bacterium;
 import linbactsim.model.Maze;
 
 import javax.swing.Timer;
+import java.util.List;
 
 // Owns and drives the simulation loop (both fast and animated modes).
 // Source: SURE.Main start-button ActionListener (~lines 1164–1296).
@@ -68,11 +69,29 @@ public class SimulationRunner {
         if (animationTimer != null) animationTimer.stop();
     }
 
-    // Advances every non-exited bacterium by one dt tick.
+    // Advances every non-exited bacterium by one dt tick, and records the pixel
+    // each bacterium ends up on (and its approximate temporal midpoint) for this
+    // iteration — used for MSD-style per-iteration trajectory export. Already-
+    // exited bacteria repeat their last position so every bacterium's per-
+    // iteration list stays the same length.
     private void stepAll(Maze maze, int dt) {
         for (int i = 0; i < maze.getBacteriaCount(); i++) {
             Bacterium b = maze.getBacterium(i);
-            if (!b.hasExited()) movementModel.step(b, maze, dt);
+            if (!b.hasExited()) {
+                List<int[]> traj = b.getTrajectory();
+                int sizeBefore = traj.size();
+                movementModel.step(b, maze, dt);
+                int sizeAfter = traj.size();
+                if (sizeAfter > sizeBefore) {
+                    int midIndex = sizeBefore + (sizeAfter - sizeBefore - 1) / 2;
+                    b.addSubIterationPosition(traj.get(midIndex));
+                    b.addIterationPosition(traj.get(sizeAfter - 1));
+                    continue;
+                }
+            }
+            int[] frozen = b.getPosition();
+            b.addSubIterationPosition(frozen);
+            b.addIterationPosition(frozen);
         }
     }
 

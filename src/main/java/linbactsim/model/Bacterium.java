@@ -32,6 +32,13 @@ public class Bacterium {
     private int[] position;
     private List<int[]> trajectory;
 
+    // One entry per simulation iteration (one dt tick each) — the pixel the
+    // bacterium occupies at the end of that iteration, and at roughly its
+    // temporal midpoint. Populated by SimulationRunner.stepAll(), not by
+    // Bacterium itself (which has no notion of "one iteration").
+    private List<int[]> iterationPositions;
+    private List<int[]> subIterationPositions;
+
     // Heading state — read/written by WeibullModel/ForceModel during each step
     // Source: SURE.Bacterium#headingRow, headingCol, headingInitialized
     private double headingRow, headingCol;
@@ -91,6 +98,8 @@ public class Bacterium {
         this.trajectoryLength = 0;
         this.time = 0;
         this.trajectory = new ArrayList<>();
+        this.iterationPositions = new ArrayList<>();
+        this.subIterationPositions = new ArrayList<>();
         setContinuousPosition(row, col);
         recordPosition(row, col);
     }
@@ -107,6 +116,8 @@ public class Bacterium {
         this.trajectoryLength = 0;
         this.time = 0;
         this.trajectory = new ArrayList<>();
+        this.iterationPositions = new ArrayList<>();
+        this.subIterationPositions = new ArrayList<>();
         int row, col;
         do {
             row = RandomNumberGenerator.getRandomPosition(maze.getNumRows());
@@ -198,6 +209,12 @@ public class Bacterium {
     public void addTime(int dt)              { this.time += dt; }
     public void addTrajectoryLength(int n)   { this.trajectoryLength += n; }
     public List<int[]> getTrajectory()       { return trajectory; }
+
+    // Source: SimulationRunner.stepAll() — one entry per iteration (see field comment above)
+    public void addIterationPosition(int[] pos)    { iterationPositions.add(pos); }
+    public void addSubIterationPosition(int[] pos) { subIterationPositions.add(pos); }
+    public List<int[]> getIterationPositions()     { return iterationPositions; }
+    public List<int[]> getSubIterationPositions()  { return subIterationPositions; }
 
     // -------------------------------------------------------------------------
     // State setters (used by WeibullModel/ForceModel / SimulationRunner)

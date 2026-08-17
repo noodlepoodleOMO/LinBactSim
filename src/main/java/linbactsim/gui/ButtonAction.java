@@ -633,6 +633,16 @@ public class ButtonAction {
             } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error saving Excel file."); }
         });
 
+        JButton downloadMsdButton = new JButton("Download MSD Positions");
+        downloadMsdButton.addActionListener(e -> {
+            JFileChooser fc = chooser("Save Excel File");
+            if (fc.showSaveDialog(listFrame) != JFileChooser.APPROVE_OPTION) return;
+            try {
+                Analysis.exportMsdPositions(maze, runner.getLastDt(), fc.getSelectedFile());
+                JOptionPane.showMessageDialog(listFrame, "MSD positions exported successfully!");
+            } catch (Exception ex) { JOptionPane.showMessageDialog(listFrame, "Error saving Excel file."); }
+        });
+
         JButton downloadSummaryButton = new JButton("Download Step Summary");
         downloadSummaryButton.addActionListener(e -> {
             JFileChooser fc = chooser("Save Step Summary File");
@@ -785,6 +795,7 @@ public class ButtonAction {
 
         JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT));
         row1.add(downloadButton);
+        row1.add(downloadMsdButton);
         row1.add(downloadSummaryButton);
         row1.add(averageTrajectoryButton);
         row1.add(exportVisitMatrixButton);
